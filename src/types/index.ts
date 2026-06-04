@@ -9,6 +9,8 @@ export interface User {
   status: 'Active' | 'Watchlist' | 'Suspended' | 'VIP';
 }
 
+export type HostApplicationStatus = 'draft' | 'pending' | 'under_review' | 'approved' | 'rejected';
+
 export interface Host {
   id?: string;
   name: string;
@@ -19,6 +21,7 @@ export interface Host {
   averageRating: number;
   revenueGenerated: number;
   verificationStatus: 'Verified' | 'Pending review' | 'Re-verification' | 'Suspended';
+  applicationStatus?: HostApplicationStatus;
 }
 
 export interface Experience {

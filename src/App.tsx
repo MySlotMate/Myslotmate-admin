@@ -9,6 +9,7 @@ import { Login } from './modules/auth/Login';
 import { Overview } from './modules/dashboard/Overview';
 import { UsersDirectory } from './modules/users/UsersDirectory';
 import { HostsDirectory } from './modules/hosts/HostsDirectory';
+import { HostProfile } from './modules/hosts/HostProfile';
 import { ExperiencesList } from './modules/experiences/ExperiencesList';
 import { BookingsDirectory } from './modules/bookings/BookingsDirectory';
 import { PaymentsDirectory } from './modules/payments/PaymentsDirectory';
@@ -73,6 +74,7 @@ const AppContent: React.FC = () => {
                 <Route path="/" element={<Overview />} />
                 <Route path="/users" element={<UsersDirectory searchQuery={globalSearch} />} />
                 <Route path="/hosts" element={<HostsDirectory searchQuery={globalSearch} />} />
+                <Route path="/hosts/:hostId" element={<HostProfile />} />
                 <Route path="/experiences" element={<ExperiencesList searchQuery={globalSearch} />} />
                 <Route path="/bookings" element={<BookingsDirectory searchQuery={globalSearch} />} />
                 <Route path="/payments" element={<PaymentsDirectory />} />

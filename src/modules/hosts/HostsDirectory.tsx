@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { IndianRupee } from 'lucide-react';
 import { fetchHosts } from '../../api/directory';
-import { approveHost, rejectHost } from '../../api/hosts';
+import { updateHostApplicationStatus } from '../../api/hosts';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Modal } from '../../components/ui/Modal';
 import { Pagination } from '../../components/ui/Pagination';
-import type { Host } from '../../types';
+import type { Host, HostApplicationStatus } from '../../types';
+import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
 
 interface HostsDirectoryProps {
   searchQuery: string;
@@ -17,6 +18,7 @@ interface HostsDirectoryProps {
 const PAGE_SIZE = 10;
 
 export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) => {
+  const navigate = useNavigate();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -25,7 +27,6 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState('');
-  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
 
   // Effective search comes from the header global search or the local input.
   const effectiveSearch = (searchQuery || localSearch).trim();
@@ -69,40 +70,29 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
   const topHostRevenue = hosts.length ? Math.max(...hosts.map(h => h.revenueGenerated)) : 0;
   const topHostName = hosts.find(h => h.revenueGenerated === topHostRevenue)?.name || 'N/A';
 
-  // Approve / suspend hit the backend, then refresh the list. "Suspend" maps to
-  // the host "reject" action server-side.
-  const runHostAction = useCallback(async (host: Host, action: 'approve' | 'suspend') => {
+  // Update a host's application status on the backend, then refresh the list.
+  const updateStatus = useCallback(async (host: Host, status: HostApplicationStatus) => {
     if (!host.id) {
       setActionError('This host record has no ID and cannot be updated.');
       return;
     }
+    if (status === host.applicationStatus) {
+      return; // no change
+    }
     setActioningId(host.id);
     setActionError(null);
     try {
-      if (action === 'approve') {
-        await approveHost(host.id);
-      } else {
-        await rejectHost(host.id, 'Suspended by admin');
-      }
+      await updateHostApplicationStatus(host.id, status);
       await loadHosts();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : `Failed to ${action} host.`);
+      setActionError(err instanceof Error ? err.message : 'Failed to update host status.');
     } finally {
       setActioningId(null);
     }
   }, [loadHosts]);
 
-  const handleApprove = (host: Host) => { void runHostAction(host, 'approve'); };
-  const handleSuspend = (host: Host) => { void runHostAction(host, 'suspend'); };
-
-  const getStatusColor = (status: string): 'green' | 'blue' | 'amber' | 'rose' => {
-    switch (status) {
-      case 'Verified': return 'green';
-      case 'Pending review': return 'amber';
-      case 'Re-verification': return 'blue';
-      case 'Suspended': return 'rose';
-      default: return 'blue';
-    }
+  const openProfile = (host: Host) => {
+    if (host.id) navigate(`/hosts/${host.id}`);
   };
 
   return (
@@ -182,12 +172,11 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
           </Button>
         </Card>
       ) : filteredHosts.length > 0 ? (
-        <Table headers={['Host Name', 'City', 'Social Followers', 'Experiences', 'Bookings', 'Rating', 'Revenue', 'Status', 'Actions']}>
+        <Table headers={['Host Name', 'City', 'Experiences', 'Bookings', 'Rating', 'Revenue', 'Status', 'Actions']}>
           {filteredHosts.map((host, index) => (
             <tr key={host.id ?? index} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
               <td className="px-6 py-4 align-top font-bold text-ink">{host.name}</td>
               <td className="px-6 py-4 align-top text-slate-600">{host.city}</td>
-              <td className="px-6 py-4 align-top text-slate-600 font-semibold">{host.socialFollowers}</td>
               <td className="px-6 py-4 align-top text-slate-600 font-medium">{host.experiencesCreated}</td>
               <td className="px-6 py-4 align-top text-slate-600 font-medium">{host.bookingsGenerated}</td>
               <td className="px-6 py-4 align-top font-extrabold text-brand-600">{host.averageRating} ★</td>
@@ -198,21 +187,24 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
                 </span>
               </td>
               <td className="px-6 py-4 align-top">
-                <Badge color={getStatusColor(host.verificationStatus)}>{host.verificationStatus}</Badge>
+                <Badge color={statusColor(host.applicationStatus)}>
+                  {host.applicationStatus ? STATUS_LABELS[host.applicationStatus] : '—'}
+                </Badge>
               </td>
               <td className="px-6 py-4 align-top">
-                <div className="flex gap-2">
-                  {host.verificationStatus !== 'Verified' && (
-                    <Button variant="action" disabled={actioningId === host.id} onClick={() => handleApprove(host)} className="hover:text-emerald-600 hover:border-emerald-300">
-                      {actioningId === host.id ? 'Working…' : 'Approve'}
-                    </Button>
-                  )}
-                  {host.verificationStatus !== 'Suspended' && (
-                    <Button variant="action" disabled={actioningId === host.id} onClick={() => handleSuspend(host)} className="hover:text-rose-600 hover:border-rose-300">
-                      {actioningId === host.id ? 'Working…' : 'Suspend'}
-                    </Button>
-                  )}
-                  <Button variant="action" onClick={() => setSelectedHost(host)}>
+                <div className="flex items-center gap-2">
+                  <select
+                    aria-label="Update application status"
+                    className="rounded-xl border border-brand-100 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={host.applicationStatus ?? ''}
+                    disabled={actioningId === host.id}
+                    onChange={(e) => void updateStatus(host, e.target.value as HostApplicationStatus)}
+                  >
+                    {APPLICATION_STATUSES.map((s) => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    ))}
+                  </select>
+                  <Button variant="action" onClick={() => openProfile(host)}>
                     View profile
                   </Button>
                 </div>
@@ -231,95 +223,6 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
       )}
 
-      {/* Host KYC Profile Modal */}
-      <Modal
-        isOpen={selectedHost !== null}
-        onClose={() => setSelectedHost(null)}
-        title={`Host verification & KYC - ${selectedHost?.name}`}
-      >
-        {selectedHost && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <p className="text-sm font-bold text-slate-400">Primary Channel</p>
-                <p className="text-lg font-extrabold text-ink">{selectedHost.name} ({selectedHost.city})</p>
-              </div>
-              <Badge color={getStatusColor(selectedHost.verificationStatus)} className="px-4 py-1.5 text-sm">
-                {selectedHost.verificationStatus}
-              </Badge>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-400 font-bold">Social Media Reach</p>
-                <p className="mt-1 text-sm font-extrabold text-ink">{selectedHost.socialFollowers} Followers</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-400 font-bold">Active Listings</p>
-                <p className="mt-1 text-sm font-extrabold text-ink">{selectedHost.experiencesCreated} Experiences</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-400 font-bold">Overall Guest Bookings</p>
-                <p className="mt-1 text-sm font-extrabold text-ink">{selectedHost.bookingsGenerated} bookings</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-400 font-bold">Cumulative Net Revenue</p>
-                <div className="mt-1 flex items-center gap-0.5 text-sm font-extrabold text-ink">
-                  <IndianRupee className="h-4 w-4 stroke-[2.5]" />
-                  <span>{selectedHost.revenueGenerated.toLocaleString()}</span>
-                </div>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-400 font-bold">Average Quality Rating</p>
-                <p className="mt-1 text-sm font-extrabold text-ink">{selectedHost.averageRating} / 5.0</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs text-slate-400 font-bold">Background Check ID</p>
-                <p className="mt-1 text-sm font-extrabold text-ink">KYC-9428-SECURE</p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-brand-100 bg-brand-50/50 p-4">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-brand-700">Verification checklist</p>
-              <ul className="mt-3 space-y-2 text-xs text-slate-700">
-                <li className="flex items-center gap-2">✓ Aadhaar Card / ID Document Verified</li>
-                <li className="flex items-center gap-2">✓ Instagram Creator Link Verified</li>
-                <li className="flex items-center gap-2">✓ Phone number and email match social domain</li>
-                <li className="flex items-center gap-2">{selectedHost.verificationStatus === 'Verified' ? '✓ Checked by Aarav Sharma' : '⏱ Awaiting manual verification check'}</li>
-              </ul>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
-              {selectedHost.verificationStatus !== 'Verified' && (
-                <Button 
-                  variant="primary"
-                  onClick={() => {
-                    handleApprove(selectedHost);
-                    setSelectedHost(null);
-                  }}
-                >
-                  Approve Host
-                </Button>
-              )}
-              {selectedHost.verificationStatus !== 'Suspended' && (
-                <Button 
-                  variant="secondary"
-                  onClick={() => {
-                    handleSuspend(selectedHost);
-                    setSelectedHost(null);
-                  }}
-                  className="hover:text-rose-600"
-                >
-                  Suspend Host
-                </Button>
-              )}
-              <Button variant="secondary" onClick={() => setSelectedHost(null)}>
-                Close KYC
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };

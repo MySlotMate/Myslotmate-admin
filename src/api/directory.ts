@@ -3,7 +3,7 @@
 // server-paginated, server-filtered data shaped to the dashboard's domain types.
 
 import { apiFetch } from './client';
-import type { User, Host } from '../types';
+import type { User, Host, HostApplicationStatus } from '../types';
 
 // Paginated is the envelope the backend returns for list endpoints.
 export interface Paginated<T> {
@@ -55,4 +55,116 @@ export function fetchHosts(q: HostQuery): Promise<Paginated<Host>> {
     search: q.search,
   });
   return apiFetch<Paginated<Host>>(`/admin/directory/hosts?${qs}`);
+}
+
+// ── Single host detail (profile page) ────────────────────────────────────────
+
+// HostRecord mirrors the backend host model (snake_case). Only the fields the
+// profile page renders are typed here.
+export interface HostRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  city: string;
+  phn_number: string;
+  avatar_url?: string;
+  tagline?: string;
+  bio?: string;
+  application_status: HostApplicationStatus;
+  experience_desc?: string;
+  description?: string;
+  moods?: string[];
+  preferred_days?: string[];
+  expertise_tags?: string[];
+  group_size?: number;
+  government_id_url?: string;
+  submitted_at?: string;
+  approved_at?: string;
+  rejected_at?: string;
+  is_identity_verified?: boolean;
+  is_super_host?: boolean;
+  is_community_champ?: boolean;
+  social_instagram?: string;
+  social_linkedin?: string;
+  social_website?: string;
+  avg_rating?: number;
+  total_reviews?: number;
+  created_at: string;
+}
+
+export interface HostDetailUser {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  isVerified: boolean;
+}
+
+export interface HostDetailStats {
+  experiencesCreated: number;
+  bookingsGenerated: number;
+  revenueGenerated: number;
+}
+
+export interface HostDetail {
+  host: HostRecord;
+  user: HostDetailUser | null;
+  stats: HostDetailStats;
+}
+
+export function fetchHostDetail(hostId: string): Promise<HostDetail> {
+  return apiFetch<HostDetail>(`/admin/directory/hosts/${hostId}`);
+}
+
+// HostEvent is a host's experience as returned by the events endpoint.
+export interface HostEvent {
+  id: string;
+  title: string;
+  status: string;
+  price_cents?: number;
+  is_free: boolean;
+  is_online: boolean;
+  location?: string;
+  capacity: number;
+  total_bookings: number;
+  avg_rating?: number;
+  time: string;
+  cover_image_url?: string;
+  mood?: string;
+}
+
+export function fetchHostEvents(hostId: string): Promise<HostEvent[]> {
+  return apiFetch<HostEvent[]>(`/events/host/${hostId}`);
+}
+
+// ── All events (Experiences tab) ─────────────────────────────────────────────
+
+export interface AdminEvent {
+  id: string;
+  title: string;
+  hostName: string;
+  city: string;
+  category: string;
+  price: number;
+  isFree: boolean;
+  bookings: number;
+  rating: number;
+  status: string; // draft | live | paused | cancelled
+}
+
+export interface EventQuery {
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: string;
+}
+
+export function fetchEvents(q: EventQuery): Promise<Paginated<AdminEvent>> {
+  const qs = buildParams({
+    page: q.page,
+    page_size: q.pageSize,
+    search: q.search,
+    status: q.status,
+  });
+  return apiFetch<Paginated<AdminEvent>>(`/admin/directory/events?${qs}`);
 }
