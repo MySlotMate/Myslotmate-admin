@@ -17,7 +17,6 @@ import {
   X,
   LogOut 
 } from 'lucide-react';
-import { Card } from '../components/ui/Card';
 import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
@@ -107,20 +106,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             <span>Log out</span>
           </button>
         </nav>
-
-        <Card className="mt-6 p-4">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">Live snapshot</p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-[11px] text-slate-500">Open reviews</p>
-              <p className="mt-1 text-lg font-extrabold text-ink">128</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-[11px] text-slate-500">Pending payouts</p>
-              <p className="mt-1 text-lg font-extrabold text-ink">$84.2k</p>
-            </div>
-          </div>
-        </Card>
       </aside>
     </>
   );

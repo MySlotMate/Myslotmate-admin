@@ -7,14 +7,19 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
+import { Pagination } from '../../components/ui/Pagination';
 import type { Host } from '../../types';
 
 interface HostsDirectoryProps {
   searchQuery: string;
 }
 
+const PAGE_SIZE = 10;
+
 export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) => {
   const [hosts, setHosts] = useState<Host[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
@@ -22,30 +27,43 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
   const [localSearch, setLocalSearch] = useState('');
   const [selectedHost, setSelectedHost] = useState<Host | null>(null);
 
+  // Effective search comes from the header global search or the local input.
+  const effectiveSearch = (searchQuery || localSearch).trim();
+  const [debouncedSearch, setDebouncedSearch] = useState(effectiveSearch);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(effectiveSearch), 350);
+    return () => clearTimeout(t);
+  }, [effectiveSearch]);
+
+  // A new search returns to the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const loadHosts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setHosts(await fetchHosts());
+      const res = await fetchHosts({
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+      });
+      setHosts(res.items);
+      setTotal(res.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load hosts.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, debouncedSearch]);
 
   useEffect(() => {
     void loadHosts();
   }, [loadHosts]);
 
-  // Filter hosts based on search query
-  const filteredHosts = hosts.filter(host => {
-    const query = (searchQuery || localSearch).toLowerCase();
-    return (
-      host.name.toLowerCase().includes(query) ||
-      host.city.toLowerCase().includes(query)
-    );
-  });
+  // The server already applies the search filter — render the page as-is.
+  const filteredHosts = hosts;
 
   const pendingVerificationCount = hosts.filter(h => h.verificationStatus === 'Pending review').length;
   const topHostRevenue = hosts.length ? Math.max(...hosts.map(h => h.revenueGenerated)) : 0;
@@ -206,6 +224,11 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
         <Card className="p-10 text-center">
           <p className="text-slate-400 font-medium">No hosts found matching your criteria.</p>
         </Card>
+      )}
+
+      {/* Server-side pagination */}
+      {!loading && !error && total > 0 && (
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
       )}
 
       {/* Host KYC Profile Modal */}

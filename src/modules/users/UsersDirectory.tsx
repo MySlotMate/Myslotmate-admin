@@ -5,70 +5,77 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Card } from '../../components/ui/Card';
+import { Pagination } from '../../components/ui/Pagination';
 import type { User } from '../../types';
 
 interface UsersDirectoryProps {
   searchQuery: string;
 }
 
+const PAGE_SIZE = 10;
+
 export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('All cities');
-  const [statusFilter, setStatusFilter] = useState('All statuses');
   const [tierFilter, setTierFilter] = useState('All spending tiers');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Effective search comes from the header global search or the local input.
+  const effectiveSearch = (searchQuery || localSearch).trim();
+  const [debouncedSearch, setDebouncedSearch] = useState(effectiveSearch);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(effectiveSearch), 350);
+    return () => clearTimeout(t);
+  }, [effectiveSearch]);
+
+  // Map UI filter labels to backend query params.
+  const cityParam = cityFilter === 'All cities' ? '' : cityFilter;
+  const tierParam =
+    tierFilter === 'High value' ? 'high_value'
+    : tierFilter === 'Repeat booker' ? 'repeat'
+    : tierFilter === 'New user' ? 'new'
+    : '';
+
+  // Any filter/search change returns to the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, cityParam, tierParam]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setUsers(await fetchUsers());
+      const res = await fetchUsers({
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        city: cityParam || undefined,
+        tier: tierParam || undefined,
+      });
+      setUsers(res.items);
+      setTotal(res.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, debouncedSearch, cityParam, tierParam]);
 
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
 
-  // Filter handlers
-  const filteredUsers = users.filter((user) => {
-    // 1. Search Query (checks either the header globalSearch OR local search field)
-    const query = (searchQuery || localSearch).toLowerCase();
-    const matchesSearch = 
-      user.name.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query) ||
-      user.id.toLowerCase().includes(query);
-
-    // 2. City Filter
-    const matchesCity = cityFilter === 'All cities' || user.city === cityFilter;
-
-    // 3. Status Filter
-    const matchesStatus = statusFilter === 'All statuses' || user.status === statusFilter;
-
-    // 4. Tier Filter
-    let matchesTier = true;
-    if (tierFilter === 'High value') {
-      matchesTier = user.totalSpent >= 500;
-    } else if (tierFilter === 'Repeat booker') {
-      matchesTier = user.totalBookings >= 5;
-    } else if (tierFilter === 'New user') {
-      matchesTier = user.totalBookings <= 3;
-    }
-
-    return matchesSearch && matchesCity && matchesStatus && matchesTier;
-  });
+  // The server already applies search/city/tier filters — render the page as-is.
+  const filteredUsers = users;
 
   const handleReset = () => {
     setLocalSearch('');
     setCityFilter('All cities');
-    setStatusFilter('All statuses');
     setTierFilter('All spending tiers');
   };
 
@@ -125,7 +132,7 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
 
       {/* Filter Surface */}
       <div className="rounded-3xl border border-brand-100/80 bg-white/95 shadow-soft backdrop-blur-md p-5">
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))]">
           <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
             <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
               <circle cx="11" cy="11" r="7"></circle>
@@ -148,14 +155,6 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
             <option>Jaipur</option>
             <option>Kolkata</option>
             <option>Goa</option>
-          </select>
-
-          <select className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option>All statuses</option>
-            <option>Active</option>
-            <option>VIP</option>
-            <option>Watchlist</option>
-            <option>Suspended</option>
           </select>
 
           <select className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400" value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
@@ -225,6 +224,11 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
             Reset All Filters
           </Button>
         </Card>
+      )}
+
+      {/* Server-side pagination */}
+      {!loading && !error && total > 0 && (
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
       )}
 
       {/* User Details Modal */}
