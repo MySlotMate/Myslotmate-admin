@@ -168,3 +168,35 @@ export function fetchEvents(q: EventQuery): Promise<Paginated<AdminEvent>> {
   });
   return apiFetch<Paginated<AdminEvent>>(`/admin/directory/events?${qs}`);
 }
+
+// ── Bookings tab ─────────────────────────────────────────────────────────────
+
+export interface AdminBooking {
+  id: string;
+  user: string;
+  experience: string;
+  host: string;
+  city: string;
+  date: string;
+  amount: number;
+  quantity: number;
+  paymentStatus: string;
+  bookingStatus: string;
+}
+
+export interface BookingQuery {
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: string; // booking status: pending | confirmed | cancelled | refunded
+}
+
+export function fetchBookings(q: BookingQuery): Promise<Paginated<AdminBooking>> {
+  const qs = buildParams({
+    page: q.page,
+    page_size: q.pageSize,
+    search: q.search,
+    status: q.status,
+  });
+  return apiFetch<Paginated<AdminBooking>>(`/admin/directory/bookings?${qs}`);
+}

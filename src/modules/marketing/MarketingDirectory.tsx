@@ -6,10 +6,9 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { fetchEvents, type AdminEvent } from '../../api/directory';
 import { fetchMarketingConfig, updateMarketingConfig, type HomepageMarketingConfig } from '../../api/marketing';
-import { Search, Pin, Trash2, Settings, Sparkles, Save, Check } from 'lucide-react';
+import { Search, Star, LayoutGrid, X, Save, Check } from 'lucide-react';
 
 export const MarketingDirectory: React.FC = () => {
-  // Tabs: 'homepage' or 'campaigns'
   const [activeTab, setActiveTab] = useState<'homepage' | 'campaigns'>('homepage');
 
   // Campaigns state (from MockDataContext)
@@ -18,22 +17,23 @@ export const MarketingDirectory: React.FC = () => {
   const [newCampaignChannel, setNewCampaignChannel] = useState('Meta ads');
   const [newCampaignSpend, setNewCampaignSpend] = useState('');
 
-  // Homepage Settings state
+  // Homepage settings state
   const [config, setConfig] = useState<HomepageMarketingConfig>({
     featured_limit: 3,
     curated_limit: 8,
     featured_event_ids: [],
-    curated_event_ids: []
+    curated_event_ids: [],
   });
   const [configLoading, setConfigLoading] = useState(true);
   const [configSaving, setConfigSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
 
-  // Live Events state (for pinning)
+  // Live events (for pinning)
   const [allEvents, setAllEvents] = useState<AdminEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Load configuration and live events
   useEffect(() => {
     async function loadData() {
       setConfigLoading(true);
@@ -41,16 +41,14 @@ export const MarketingDirectory: React.FC = () => {
       try {
         const [cfg, eventsRes] = await Promise.all([
           fetchMarketingConfig(),
-          fetchEvents({ page: 1, pageSize: 100, status: 'live' })
+          fetchEvents({ page: 1, pageSize: 100, status: 'live' }),
         ]);
-
         setConfig({
           featured_limit: cfg.featured_limit ?? 3,
           curated_limit: cfg.curated_limit ?? 8,
           featured_event_ids: cfg.featured_event_ids ?? [],
-          curated_event_ids: cfg.curated_event_ids ?? []
+          curated_event_ids: cfg.curated_event_ids ?? [],
         });
-
         setAllEvents(eventsRes.items);
       } catch (err) {
         console.error('Failed to load marketing dashboard data', err);
@@ -59,55 +57,50 @@ export const MarketingDirectory: React.FC = () => {
         setEventsLoading(false);
       }
     }
-
     loadData();
   }, []);
 
-  // Save Config
   const handleSaveConfig = async () => {
     setConfigSaving(true);
+    setSaveError(null);
     try {
       await updateMarketingConfig(config);
-      alert('Homepage marketing configuration updated successfully!');
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2500);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save configuration.');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save configuration.');
     } finally {
       setConfigSaving(false);
     }
   };
 
-  // Pin / Unpin handlers
-  const pinFeatured = (eventId: string) => {
-    if ((config.featured_event_ids ?? []).includes(eventId)) return;
-    setConfig(prev => ({
-      ...prev,
-      featured_event_ids: [...(prev.featured_event_ids ?? []), eventId]
-    }));
-  };
+  const featuredIds = config.featured_event_ids ?? [];
+  const curatedIds = config.curated_event_ids ?? [];
+  const featuredLimit = config.featured_limit ?? 3;
+  const curatedLimit = config.curated_limit ?? 8;
 
-  const unpinFeatured = (eventId: string) => {
-    setConfig(prev => ({
-      ...prev,
-      featured_event_ids: (prev.featured_event_ids ?? []).filter(id => id !== eventId)
-    }));
-  };
+  const toggleFeatured = (id: string) =>
+    setConfig(prev => {
+      const ids = prev.featured_event_ids ?? [];
+      return { ...prev, featured_event_ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] };
+    });
+  const toggleCurated = (id: string) =>
+    setConfig(prev => {
+      const ids = prev.curated_event_ids ?? [];
+      return { ...prev, curated_event_ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] };
+    });
+  const removeFeatured = (id: string) =>
+    setConfig(prev => ({ ...prev, featured_event_ids: (prev.featured_event_ids ?? []).filter(x => x !== id) }));
+  const removeCurated = (id: string) =>
+    setConfig(prev => ({ ...prev, curated_event_ids: (prev.curated_event_ids ?? []).filter(x => x !== id) }));
 
-  const pinCurated = (eventId: string) => {
-    if ((config.curated_event_ids ?? []).includes(eventId)) return;
-    setConfig(prev => ({
-      ...prev,
-      curated_event_ids: [...(prev.curated_event_ids ?? []), eventId]
-    }));
-  };
+  const getEventDetails = (id: string) => allEvents.find(e => e.id === id);
 
-  const unpinCurated = (eventId: string) => {
-    setConfig(prev => ({
-      ...prev,
-      curated_event_ids: (prev.curated_event_ids ?? []).filter(id => id !== eventId)
-    }));
-  };
+  const filteredEvents = allEvents.filter(e =>
+    e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    e.hostName.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  // Campaign launch handler
   const handleLaunchCampaign = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCampaignName || !newCampaignSpend) {
@@ -119,35 +112,66 @@ export const MarketingDirectory: React.FC = () => {
       alert('Invalid spend amount.');
       return;
     }
-
     setCampaigns(prev => [
       ...prev,
-      {
-        name: newCampaignName,
-        audience: 'New user segment',
-        channel: newCampaignChannel,
-        spend: spendVal,
-        bookings: 0,
-        roas: '0.0x',
-        status: 'Running'
-      }
+      { name: newCampaignName, audience: 'New user segment', channel: newCampaignChannel, spend: spendVal, bookings: 0, roas: '0.0x', status: 'Running' },
     ]);
-
     setNewCampaignName('');
     setNewCampaignSpend('');
     alert(`Campaign "${newCampaignName}" launched successfully!`);
   };
 
-  // Helper to find event title/details for pinned IDs
-  const getEventDetails = (id: string) => {
-    return allEvents.find(e => e.id === id);
+  // ── Compact pinned panel ───────────────────────────────────────────────────
+  const renderPinnedPanel = (
+    title: string,
+    Icon: typeof Star,
+    ids: string[],
+    limit: number,
+    onRemove: (id: string) => void,
+    accent: string,
+  ) => {
+    const over = ids.length > limit;
+    return (
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <h4 className="flex items-center gap-1.5 text-sm font-bold text-ink">
+            <Icon className={`h-4 w-4 ${accent}`} /> {title}
+          </h4>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${over ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+            {ids.length}/{limit}
+          </span>
+        </div>
+        {over && (
+          <p className="mt-1 text-[11px] font-semibold text-amber-600">Only the first {limit} will show on the homepage.</p>
+        )}
+        {ids.length === 0 ? (
+          <div className="mt-3 rounded-xl border border-dashed border-slate-200 p-4 text-center text-[11px] text-slate-400">
+            Nothing pinned — live events auto-fill this section by time.
+          </div>
+        ) : (
+          <div className="mt-3 space-y-1.5">
+            {ids.map((id, i) => {
+              const d = getEventDetails(id);
+              const hidden = i >= limit;
+              return (
+                <div key={id} className={`flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 ${hidden ? 'opacity-50' : ''}`}>
+                  <span className="w-4 shrink-0 text-center text-[10px] font-black text-slate-400">{i + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-ink">{d?.title ?? `Event ${id.slice(0, 8)}…`}</p>
+                    <p className="truncate text-[10px] font-semibold text-slate-400">{d ? `${d.hostName} · ${d.city}` : 'Not live / not found'}</p>
+                  </div>
+                  {hidden && <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-amber-600">hidden</span>}
+                  <button onClick={() => onRemove(id)} title="Unpin" className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    );
   };
-
-  // Filter live events for selection list
-  const filteredEvents = allEvents.filter(e =>
-    e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    e.hostName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
@@ -160,264 +184,128 @@ export const MarketingDirectory: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex border-b border-slate-100 bg-white/40 p-1 rounded-2xl backdrop-blur-sm max-w-md">
-        <button
-          onClick={() => setActiveTab('homepage')}
-          className={`flex-1 py-3 text-center text-xs font-black uppercase tracking-wider transition-all rounded-xl cursor-pointer ${
-            activeTab === 'homepage'
-              ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          Homepage Placement
-        </button>
-        <button
-          onClick={() => setActiveTab('campaigns')}
-          className={`flex-1 py-3 text-center text-xs font-black uppercase tracking-wider transition-all rounded-xl cursor-pointer ${
-            activeTab === 'campaigns'
-              ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          Campaign Operations
-        </button>
+      {/* Tabs */}
+      <div className="flex max-w-md gap-1 rounded-2xl border border-slate-100 bg-white/40 p-1 backdrop-blur-sm">
+        {(['homepage', 'campaigns'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`flex-1 rounded-xl py-2.5 text-center text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === t ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+            }`}
+          >
+            {t === 'homepage' ? 'Homepage Placement' : 'Campaign Operations'}
+          </button>
+        ))}
       </div>
 
       {activeTab === 'homepage' && (
-        <div className="space-y-6">
-          {configLoading ? (
-            <Card className="p-10 text-center">
-              <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-              <p className="mt-3 text-slate-400 font-medium">Loading homepage configuration…</p>
-            </Card>
-          ) : (
-            <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
-              {/* Left Column: limits and Pinned Lists */}
-              <div className="space-y-6">
-                <Card className="p-6 relative overflow-hidden bg-gradient-to-br from-white via-white to-brand-50/20">
-                  <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                    <Settings className="w-24 h-24 text-brand-600" />
-                  </div>
-                  <h3 className="text-lg font-bold text-ink flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-brand-500" />
-                    Homepage Display Limits
-                  </h3>
-                  <p className="text-xs text-mist mt-1 mb-6">Specify the maximum number of experiences shown in each section.</p>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="featured_limit">
-                        Featured Slideshow Limit
-                      </label>
-                      <input
-                        id="featured_limit"
-                        type="number"
-                        min={1}
-                        max={10}
-                        className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
-                        value={config.featured_limit ?? 3}
-                        onChange={(e) => setConfig(prev => ({ ...prev, featured_limit: parseInt(e.target.value) || 3 }))}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="curated_limit">
-                        Discover Experiences Limit
-                      </label>
-                      <input
-                        id="curated_limit"
-                        type="number"
-                        min={1}
-                        max={20}
-                        className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
-                        value={config.curated_limit ?? 8}
-                        onChange={(e) => setConfig(prev => ({ ...prev, curated_limit: parseInt(e.target.value) || 8 }))}
-                      />
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Pinned Featured Card */}
-                <Card className="p-6">
-                  <h3 className="text-base font-bold text-ink flex items-center gap-2">
-                    <Pin className="w-4 h-4 text-brand-500 rotate-45" />
-                    Pinned Featured Slideshow
-                  </h3>
-                  <p className="text-xs text-mist mt-1 mb-4">Specific events selected to show in the slideshow carousel, in pinned order.</p>
-
-                  {(config.featured_event_ids ?? []).length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
-                      No events pinned. Automatically displaying upcoming live events sorted by time.
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {(config.featured_event_ids ?? []).map((id) => {
-                        const details = getEventDetails(id);
-                        return (
-                          <div key={id} className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl transition border border-slate-100">
-                            <div className="min-w-0 pr-3">
-                              <p className="text-xs font-bold text-ink truncate">{details?.title ?? `Event (${id.slice(0, 8)}...)`}</p>
-                              <p className="text-[10px] text-slate-400 font-semibold">{details ? `by ${details.hostName} · ${details.city}` : 'Not found / Not live'}</p>
-                            </div>
-                            <button
-                              onClick={() => unpinFeatured(id)}
-                              className="text-slate-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition"
-                              title="Unpin event"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-
-                {/* Pinned Curated Card */}
-                <Card className="p-6">
-                  <h3 className="text-base font-bold text-ink flex items-center gap-2">
-                    <Pin className="w-4 h-4 text-brand-500" />
-                    Pinned Discover Experiences
-                  </h3>
-                  <p className="text-xs text-mist mt-1 mb-4">Specific events pinned to the main curated grid, in pinned order.</p>
-
-                  {(config.curated_event_ids ?? []).length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
-                      No events pinned. Automatically displaying upcoming live events sorted by time.
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {(config.curated_event_ids ?? []).map((id) => {
-                        const details = getEventDetails(id);
-                        return (
-                          <div key={id} className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl transition border border-slate-100">
-                            <div className="min-w-0 pr-3">
-                              <p className="text-xs font-bold text-ink truncate">{details?.title ?? `Event (${id.slice(0, 8)}...)`}</p>
-                              <p className="text-[10px] text-slate-400 font-semibold">{details ? `by ${details.hostName} · ${details.city}` : 'Not found / Not live'}</p>
-                            </div>
-                            <button
-                              onClick={() => unpinCurated(id)}
-                              className="text-slate-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition"
-                              title="Unpin event"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-
+        configLoading ? (
+          <Card className="p-10 text-center">
+            <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+            <p className="mt-3 text-sm font-medium text-slate-400">Loading homepage configuration…</p>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {/* Sticky control bar: limits + live counts + save */}
+            <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-brand-100/80 bg-white/95 px-4 py-3 shadow-soft backdrop-blur">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                  <Star className="h-3.5 w-3.5 text-amber-500" /> Featured limit
+                  <input
+                    type="number" min={1} max={10}
+                    className="w-16 rounded-lg border border-brand-100 bg-white px-2 py-1.5 text-sm font-bold text-ink outline-none focus:border-brand-400"
+                    value={featuredLimit}
+                    onChange={(e) => setConfig(p => ({ ...p, featured_limit: parseInt(e.target.value) || 1 }))}
+                  />
+                  <CountPill count={featuredIds.length} limit={featuredLimit} />
+                </label>
+                <span className="hidden h-7 w-px bg-slate-200 sm:block" />
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                  <LayoutGrid className="h-3.5 w-3.5 text-brand-500" /> Discover limit
+                  <input
+                    type="number" min={1} max={20}
+                    className="w-16 rounded-lg border border-brand-100 bg-white px-2 py-1.5 text-sm font-bold text-ink outline-none focus:border-brand-400"
+                    value={curatedLimit}
+                    onChange={(e) => setConfig(p => ({ ...p, curated_limit: parseInt(e.target.value) || 1 }))}
+                  />
+                  <CountPill count={curatedIds.length} limit={curatedLimit} />
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                {saveError && <span className="text-xs font-semibold text-rose-600">{saveError}</span>}
                 <Button
                   variant="primary"
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl"
+                  className={`flex items-center gap-2 ${justSaved ? '!bg-emerald-600 hover:!bg-emerald-600' : ''}`}
                   onClick={handleSaveConfig}
                   disabled={configSaving}
                 >
-                  <Save className="w-4 h-4" />
-                  {configSaving ? 'Saving Changes...' : 'Save Homepage Configuration'}
+                  {justSaved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                  {configSaving ? 'Saving…' : justSaved ? 'Saved' : 'Save'}
                 </Button>
               </div>
+            </div>
 
-              {/* Right Column: Search and select active events to pin */}
-              <div className="space-y-4">
-                <Card className="p-6">
-                  <h3 className="text-lg font-bold text-ink">Search & Pin Experiences</h3>
-                  <p className="text-xs text-mist mt-1 mb-5">Search all live experiences and pin them to either display section.</p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {/* Left: searchable live events */}
+              <Card className="flex flex-col p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-ink">Live experiences</h4>
+                  <span className="text-[11px] font-semibold text-slate-400">{filteredEvents.length} shown</span>
+                </div>
+                <div className="mb-3 flex items-center gap-2 rounded-xl border border-brand-100 bg-white px-3 py-2 shadow-sm">
+                  <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                  <input
+                    className="w-full bg-transparent text-sm text-slate-700 outline-none"
+                    type="search"
+                    placeholder="Search by title or host…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
 
-                  <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm mb-5">
-                    <Search className="h-4 w-4 text-slate-400" />
-                    <input
-                      className="w-full bg-transparent text-sm outline-none text-slate-700"
-                      type="search"
-                      placeholder="Search live events by title, host name..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+                {eventsLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+                    <p className="mt-2 text-xs text-slate-400">Loading live events…</p>
                   </div>
-
-                  {eventsLoading ? (
-                    <div className="p-10 text-center">
-                      <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-                      <p className="mt-3 text-slate-400 text-xs">Loading live events…</p>
-                    </div>
-                  ) : filteredEvents.length === 0 ? (
-                    <div className="p-10 text-center text-sm text-slate-400">
-                      No live events match your search.
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-[680px] overflow-y-auto pr-1">
-                      {filteredEvents.map((event) => {
-                        const isFeaturedPinned = (config.featured_event_ids ?? []).includes(event.id);
-                        const isCuratedPinned = (config.curated_event_ids ?? []).includes(event.id);
-
-                        return (
-                          <div key={event.id} className="p-4 bg-white border border-slate-100 hover:border-brand-200 rounded-2xl transition hover:shadow-sm">
-                            <div className="flex justify-between items-start gap-4">
-                              <div className="min-w-0">
-                                <Badge color="green" className="mb-2">Live</Badge>
-                                <h4 className="text-sm font-bold text-ink line-clamp-1">{event.title}</h4>
-                                <p className="text-xs text-slate-500 mt-1">
-                                  by <span className="font-semibold">{event.hostName}</span> · {event.city}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2 mt-4 pt-3 border-t border-slate-50">
-                              <button
-                                onClick={() => isFeaturedPinned ? unpinFeatured(event.id) : pinFeatured(event.id)}
-                                className={`flex-1 py-2 px-3 text-xs font-extrabold rounded-xl border flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                                  isFeaturedPinned
-                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                                    : 'bg-white border-brand-100 text-slate-700 hover:border-brand-300 hover:text-brand-700'
-                                }`}
-                              >
-                                {isFeaturedPinned ? (
-                                  <>
-                                    <Check className="w-3.5 h-3.5" />
-                                    Pinned Featured
-                                  </>
-                                ) : (
-                                  <>
-                                    <Pin className="w-3.5 h-3.5 rotate-45 text-slate-400" />
-                                    Pin Featured
-                                  </>
-                                )}
-                              </button>
-
-                              <button
-                                onClick={() => isCuratedPinned ? unpinCurated(event.id) : pinCurated(event.id)}
-                                className={`flex-1 py-2 px-3 text-xs font-extrabold rounded-xl border flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                                  isCuratedPinned
-                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                                    : 'bg-white border-brand-100 text-slate-700 hover:border-brand-300 hover:text-brand-700'
-                                }`}
-                              >
-                                {isCuratedPinned ? (
-                                  <>
-                                    <Check className="w-3.5 h-3.5" />
-                                    Pinned Curated
-                                  </>
-                                ) : (
-                                  <>
-                                    <Pin className="w-3.5 h-3.5 text-slate-400" />
-                                    Pin Curated
-                                  </>
-                                )}
-                              </button>
-                            </div>
+                ) : filteredEvents.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-slate-400">No live events match your search.</div>
+                ) : (
+                  <div className="max-h-[62vh] space-y-1.5 overflow-y-auto pr-1">
+                    {filteredEvents.map((event) => {
+                      const isF = featuredIds.includes(event.id);
+                      const isC = curatedIds.includes(event.id);
+                      return (
+                        <div
+                          key={event.id}
+                          className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition ${
+                            isF || isC ? 'border-brand-200 bg-brand-50/30' : 'border-slate-100 hover:border-brand-200'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-ink">{event.title}</p>
+                            <p className="truncate text-[11px] font-semibold text-slate-400">{event.hostName} · {event.city}</p>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
+                          <div className="flex shrink-0 gap-1.5">
+                            <PinChip active={isF} onClick={() => toggleFeatured(event.id)} Icon={Star} label="Featured" activeClass="border-amber-200 bg-amber-50 text-amber-700" />
+                            <PinChip active={isC} onClick={() => toggleCurated(event.id)} Icon={LayoutGrid} label="Discover" activeClass="border-brand-200 bg-brand-50 text-brand-700" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+
+              {/* Right: what's on the homepage */}
+              <div className="space-y-4">
+                {renderPinnedPanel('Featured slideshow', Star, featuredIds, featuredLimit, removeFeatured, 'text-amber-500')}
+                {renderPinnedPanel('Discover grid', LayoutGrid, curatedIds, curatedLimit, removeCurated, 'text-brand-500')}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )
       )}
 
       {activeTab === 'campaigns' && (
@@ -495,3 +383,33 @@ export const MarketingDirectory: React.FC = () => {
     </div>
   );
 };
+
+// ── Small UI helpers ──────────────────────────────────────────────────────────
+
+const CountPill: React.FC<{ count: number; limit: number }> = ({ count, limit }) => {
+  const over = count > limit;
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${over ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+      {count} pinned
+    </span>
+  );
+};
+
+const PinChip: React.FC<{
+  active: boolean;
+  onClick: () => void;
+  Icon: typeof Star;
+  label: string;
+  activeClass: string;
+}> = ({ active, onClick, Icon, label, activeClass }) => (
+  <button
+    onClick={onClick}
+    title={active ? `Unpin from ${label}` : `Pin to ${label}`}
+    className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-extrabold transition cursor-pointer ${
+      active ? activeClass : 'border-slate-200 text-slate-500 hover:border-brand-300 hover:text-brand-700'
+    }`}
+  >
+    {active ? <Check className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
+    {label}
+  </button>
+);
