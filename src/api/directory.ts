@@ -189,6 +189,7 @@ export interface BookingQuery {
   pageSize: number;
   search?: string;
   status?: string; // booking status: pending | confirmed | cancelled | refunded
+  eventId?: string; // filter to a single experience (event UUID)
 }
 
 export function fetchBookings(q: BookingQuery): Promise<Paginated<AdminBooking>> {
@@ -197,6 +198,7 @@ export function fetchBookings(q: BookingQuery): Promise<Paginated<AdminBooking>>
     page_size: q.pageSize,
     search: q.search,
     status: q.status,
+    event_id: q.eventId,
   });
   return apiFetch<Paginated<AdminBooking>>(`/admin/directory/bookings?${qs}`);
 }

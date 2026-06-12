@@ -5,8 +5,8 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Pagination } from '../../components/ui/Pagination';
-import { fetchBookings } from '../../api/directory';
-import type { AdminBooking } from '../../api/directory';
+import { fetchBookings, fetchEvents } from '../../api/directory';
+import type { AdminBooking, AdminEvent } from '../../api/directory';
 
 interface BookingsDirectoryProps {
   searchQuery: string;
@@ -36,6 +36,23 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
   const [error, setError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All booking statuses');
+  const [eventFilter, setEventFilter] = useState(''); // '' = all experiences
+  const [events, setEvents] = useState<AdminEvent[]>([]);
+
+  // Load the experiences once to populate the event filter dropdown.
+  useEffect(() => {
+    let alive = true;
+    void fetchEvents({ page: 1, pageSize: 100 })
+      .then((res) => {
+        if (alive) setEvents(res.items);
+      })
+      .catch(() => {
+        /* non-fatal: the event filter just stays empty */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Effective search comes from the header global search or the local input.
   const effectiveSearch = (searchQuery || localSearch).trim();
@@ -50,7 +67,7 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
   // Any filter/search change returns to the first page.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusParam]);
+  }, [debouncedSearch, statusParam, eventFilter]);
 
   const loadBookings = useCallback(async () => {
     setLoading(true);
@@ -61,6 +78,7 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
         pageSize: PAGE_SIZE,
         search: debouncedSearch || undefined,
         status: statusParam || undefined,
+        eventId: eventFilter || undefined,
       });
       setBookings(res.items);
       setTotal(res.total);
@@ -69,7 +87,7 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, statusParam]);
+  }, [page, debouncedSearch, statusParam, eventFilter]);
 
   useEffect(() => {
     void loadBookings();
@@ -78,6 +96,7 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
   const handleClear = () => {
     setLocalSearch('');
     setStatusFilter('All booking statuses');
+    setEventFilter('');
   };
 
   return (
@@ -96,7 +115,7 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
 
       {/* Filter panel */}
       <div className="rounded-3xl border border-brand-100/80 bg-white/95 shadow-soft backdrop-blur-md p-5">
-        <div className="grid gap-4 md:grid-cols-[1.6fr_minmax(0,1fr)_auto]">
+        <div className="grid gap-4 md:grid-cols-[1.6fr_minmax(0,1fr)_minmax(0,1fr)_auto]">
           <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
             <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
               <circle cx="11" cy="11" r="7"></circle>
@@ -119,6 +138,17 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
             <option>All booking statuses</option>
             {BOOKING_STATUSES.map((s) => (
               <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            ))}
+          </select>
+
+          <select
+            className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
+          >
+            <option value="">All experiences</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>{ev.title}</option>
             ))}
           </select>
 
