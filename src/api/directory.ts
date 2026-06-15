@@ -173,12 +173,15 @@ export function fetchEvents(q: EventQuery): Promise<Paginated<AdminEvent>> {
 
 export interface AdminBooking {
   id: string;
+  event_id: string;
   user: string;
   experience: string;
   host: string;
   city: string;
   date: string;
+  occurrence_date: string; // RFC3339, used for ticket generation
   amount: number;
+  amount_cents: number;
   quantity: number;
   paymentStatus: string;
   bookingStatus: string;
@@ -201,4 +204,35 @@ export function fetchBookings(q: BookingQuery): Promise<Paginated<AdminBooking>>
     event_id: q.eventId,
   });
   return apiFetch<Paginated<AdminBooking>>(`/admin/directory/bookings?${qs}`);
+}
+
+export interface BookingReminderPreview {
+  whatsapp_body: string;
+  email_subject: string;
+  email_body: string;
+  user_email: string;
+  user_phone: string;
+}
+
+export function fetchBookingReminderPreview(bookingId: string): Promise<BookingReminderPreview> {
+  return apiFetch<BookingReminderPreview>(`/admin/directory/bookings/${bookingId}/reminder-preview`);
+}
+
+export function sendBookingReminder(bookingId: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/admin/directory/bookings/${bookingId}/send-reminder`, {
+    method: 'POST',
+  });
+}
+
+export function bulkNotifyEventGuests(
+  eventId: string,
+  body: { message: string; channel: string }
+): Promise<{ message: string; notified_count: number }> {
+  return apiFetch<{ message: string; notified_count: number }>(
+    `/admin/directory/marketing/events/${eventId}/bulk-notify`,
+    {
+      method: 'POST',
+      body,
+    }
+  );
 }

@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { Pagination } from '../../components/ui/Pagination';
 import { fetchEvents } from '../../api/directory';
 import type { AdminEvent } from '../../api/directory';
+import { OnSpotBookingModal } from './OnSpotBookingModal';
 
 interface ExperiencesListProps {
   searchQuery: string;
@@ -34,6 +35,7 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
   const [error, setError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All statuses');
+  const [bookingEvent, setBookingEvent] = useState<AdminEvent | null>(null);
 
   // Effective search comes from the header global search or the local input.
   const effectiveSearch = (searchQuery || localSearch).trim();
@@ -128,7 +130,7 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
           <Button variant="secondary" className="mt-4" onClick={() => void loadEvents()}>Retry</Button>
         </Card>
       ) : events.length > 0 ? (
-        <Table headers={['Title', 'Host Name', 'City', 'Category', 'Price', 'Bookings', 'Rating', 'Status']}>
+        <Table headers={['Title', 'Host Name', 'City', 'Category', 'Price', 'Bookings', 'Rating', 'Status', 'Actions']}>
           {events.map((exp) => (
             <tr key={exp.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
               <td className="px-6 py-4 align-top font-bold text-ink max-w-[220px]">{exp.title}</td>
@@ -150,6 +152,9 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
               <td className="px-6 py-4 align-top">
                 <Badge color={statusColor(exp.status)}>{exp.status}</Badge>
               </td>
+              <td className="px-6 py-4 align-top">
+                <Button variant="action" onClick={() => setBookingEvent(exp)}>On-spot booking</Button>
+              </td>
             </tr>
           ))}
         </Table>
@@ -162,6 +167,15 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
       {/* Server-side pagination */}
       {!loading && !error && total > 0 && (
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
+      )}
+
+      {bookingEvent && (
+        <OnSpotBookingModal
+          event={bookingEvent}
+          isOpen={bookingEvent !== null}
+          onClose={() => setBookingEvent(null)}
+          onBooked={() => void loadEvents()}
+        />
       )}
     </div>
   );

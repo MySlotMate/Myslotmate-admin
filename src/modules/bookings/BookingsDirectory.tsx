@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { IndianRupee } from 'lucide-react';
+import { IndianRupee, Bell, Loader2, X, Download } from 'lucide-react';
+import { downloadTicketPdf } from '../../lib/ticket';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Pagination } from '../../components/ui/Pagination';
-import { fetchBookings, fetchEvents } from '../../api/directory';
-import type { AdminBooking, AdminEvent } from '../../api/directory';
+import { fetchBookings, fetchEvents, fetchBookingReminderPreview, sendBookingReminder } from '../../api/directory';
+import type { AdminBooking, AdminEvent, BookingReminderPreview } from '../../api/directory';
 
 interface BookingsDirectoryProps {
   searchQuery: string;
@@ -38,6 +39,30 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
   const [statusFilter, setStatusFilter] = useState('All booking statuses');
   const [eventFilter, setEventFilter] = useState(''); // '' = all experiences
   const [events, setEvents] = useState<AdminEvent[]>([]);
+
+  // Reminder preview and sending states
+  const [reminderBookingId, setReminderBookingId] = useState<string | null>(null);
+  const [reminderPreview, setReminderPreview] = useState<BookingReminderPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [sendingReminder, setSendingReminder] = useState(false);
+  const [activePreviewTab, setActivePreviewTab] = useState<'whatsapp' | 'email'>('whatsapp');
+  const [reminderModalError, setReminderModalError] = useState<string | null>(null);
+  const [ticketDownloadingId, setTicketDownloadingId] = useState<string | null>(null);
+
+  const handleDownloadTicket = async (booking: AdminBooking) => {
+    setTicketDownloadingId(booking.id);
+    try {
+      await downloadTicketPdf(
+        booking.event_id,
+        { id: booking.id, quantity: booking.quantity, amount_cents: booking.amount_cents, occurrence_date: booking.occurrence_date },
+        booking.user,
+      );
+    } catch {
+      alert('Could not generate the ticket. Please try again.');
+    } finally {
+      setTicketDownloadingId(null);
+    }
+  };
 
   // Load the experiences once to populate the event filter dropdown.
   useEffect(() => {
@@ -88,6 +113,36 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
       setLoading(false);
     }
   }, [page, debouncedSearch, statusParam, eventFilter]);
+
+  const handleOpenReminderModal = async (bookingId: string) => {
+    setReminderBookingId(bookingId);
+    setPreviewLoading(true);
+    setReminderModalError(null);
+    setReminderPreview(null);
+    try {
+      const data = await fetchBookingReminderPreview(bookingId);
+      setReminderPreview(data);
+    } catch (err) {
+      setReminderModalError(err instanceof Error ? err.message : 'Failed to fetch reminder preview.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleSendReminder = async () => {
+    if (!reminderBookingId) return;
+    setSendingReminder(true);
+    setReminderModalError(null);
+    try {
+      const res = await sendBookingReminder(reminderBookingId);
+      alert(res.message);
+      setReminderBookingId(null);
+    } catch (err) {
+      setReminderModalError(err instanceof Error ? err.message : 'Failed to send reminder.');
+    } finally {
+      setSendingReminder(false);
+    }
+  };
 
   useEffect(() => {
     void loadBookings();
@@ -170,14 +225,13 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
           <Button variant="secondary" className="mt-4" onClick={() => void loadBookings()}>Retry</Button>
         </Card>
       ) : bookings.length > 0 ? (
-        <Table headers={['Booking ID', 'User', 'Experience', 'Host', 'City', 'Date', 'Qty', 'Amount', 'Payment Status', 'Booking Status']}>
-          {bookings.map((booking) => (
+        <Table headers={['S.No', 'User', 'Experience', 'Host', 'Date', 'Qty', 'Amount', 'Booking Status', 'Actions']}>
+          {bookings.map((booking, index) => (
             <tr key={booking.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
-              <td className="px-6 py-4 align-top font-extrabold text-ink" title={booking.id}>{booking.id.slice(0, 8)}</td>
+              <td className="px-6 py-4 align-top font-extrabold text-ink" title={booking.id}>{(page - 1) * PAGE_SIZE + index + 1}</td>
               <td className="px-6 py-4 align-top text-slate-700 font-medium">{booking.user}</td>
               <td className="px-6 py-4 align-top text-slate-700 max-w-[200px] font-medium">{booking.experience}</td>
               <td className="px-6 py-4 align-top text-slate-600">{booking.host}</td>
-              <td className="px-6 py-4 align-top text-slate-600">{booking.city}</td>
               <td className="px-6 py-4 align-top text-slate-500">{booking.date}</td>
               <td className="px-6 py-4 align-top text-slate-600 font-medium">{booking.quantity}</td>
               <td className="px-6 py-4 align-top font-extrabold text-ink">
@@ -187,10 +241,34 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
                 </span>
               </td>
               <td className="px-6 py-4 align-top">
-                <Badge color={getStatusColor(booking.paymentStatus)}>{booking.paymentStatus}</Badge>
+                <Badge color={getStatusColor(booking.bookingStatus)}>{booking.bookingStatus}</Badge>
               </td>
               <td className="px-6 py-4 align-top">
-                <Badge color={getStatusColor(booking.bookingStatus)}>{booking.bookingStatus}</Badge>
+                <div className="flex items-center gap-2">
+                  {booking.bookingStatus === 'Confirmed' && (
+                    <Button
+                      variant="secondary"
+                      className="!py-1.5 !px-3 text-xs flex items-center gap-1 hover:bg-brand-50"
+                      onClick={() => handleOpenReminderModal(booking.id)}
+                    >
+                      <Bell className="h-3.5 w-3.5 text-brand-600" />
+                      Remind
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    className="!py-1.5 !px-3 text-xs flex items-center gap-1 hover:bg-brand-50"
+                    disabled={ticketDownloadingId === booking.id || !booking.event_id}
+                    onClick={() => void handleDownloadTicket(booking)}
+                  >
+                    {ticketDownloadingId === booking.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-600" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5 text-brand-600" />
+                    )}
+                    Ticket
+                  </Button>
+                </div>
               </td>
             </tr>
           ))}
@@ -204,6 +282,101 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
       {/* Server-side pagination */}
       {!loading && !error && total > 0 && (
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
+      )}
+
+      {/* Reminder Preview & Send Modal */}
+      {reminderBookingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-brand-100 bg-white/95 shadow-soft backdrop-blur">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h4 className="flex items-center gap-2 font-display text-lg font-bold text-ink">
+                <Bell className="h-5 w-5 text-brand-600 animate-pulse" />
+                Send Event Reminder
+              </h4>
+              <button
+                onClick={() => setReminderBookingId(null)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {previewLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+                  <p className="mt-3 text-xs font-semibold text-slate-400">Fetching preview data...</p>
+                </div>
+              ) : reminderModalError ? (
+                <div className="rounded-2xl bg-rose-50 p-4 text-center">
+                  <p className="text-sm font-semibold text-rose-600">{reminderModalError}</p>
+                  <Button variant="secondary" className="mt-3" onClick={() => handleOpenReminderModal(reminderBookingId)}>
+                    Retry
+                  </Button>
+                </div>
+              ) : reminderPreview ? (
+                <div className="space-y-4">
+                  <div className="rounded-2xl bg-slate-50 p-4 text-xs font-medium text-slate-600 space-y-1">
+                    <p><strong className="text-slate-800">Guest Email:</strong> {reminderPreview.user_email}</p>
+                    {reminderPreview.user_phone && (
+                      <p><strong className="text-slate-800">Guest Phone:</strong> {reminderPreview.user_phone}</p>
+                    )}
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+                    {(['whatsapp', 'email'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setActivePreviewTab(tab)}
+                        className={`flex-1 rounded-lg py-1.5 text-center text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                          activePreviewTab === tab ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {tab === 'whatsapp' ? 'WhatsApp Message' : 'Email Notification'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Preview Container */}
+                  <div className="rounded-2xl border border-slate-150 bg-white p-4 shadow-inner max-h-[250px] overflow-y-auto">
+                    {activePreviewTab === 'whatsapp' ? (
+                      <div className="whitespace-pre-wrap text-sm text-slate-700 font-mono">
+                        {reminderPreview.whatsapp_body}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="border-b border-slate-100 pb-2 text-xs font-bold text-slate-500">
+                          Subject: <span className="text-slate-800 font-extrabold">{reminderPreview.email_subject}</span>
+                        </div>
+                        <div 
+                          className="text-xs text-slate-600 overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: reminderPreview.email_body }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button variant="secondary" onClick={() => setReminderBookingId(null)} disabled={sendingReminder}>
+                      Cancel
+                    </Button>
+                    <Button variant="primary" onClick={handleSendReminder} disabled={sendingReminder}>
+                      {sendingReminder ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Sending...
+                        </span>
+                      ) : (
+                        'Confirm & Send'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

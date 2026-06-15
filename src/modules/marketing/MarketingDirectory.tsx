@@ -4,12 +4,87 @@ import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { fetchEvents, type AdminEvent } from '../../api/directory';
+import { fetchEvents, fetchBookings, bulkNotifyEventGuests, type AdminEvent } from '../../api/directory';
 import { fetchMarketingConfig, updateMarketingConfig, type HomepageMarketingConfig } from '../../api/marketing';
-import { Search, Star, LayoutGrid, X, Save, Check } from 'lucide-react';
+import { Search, Star, LayoutGrid, X, Save, Check, Loader2 } from 'lucide-react';
 
 export const MarketingDirectory: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'homepage' | 'campaigns'>('homepage');
+  const [activeTab, setActiveTab] = useState<'homepage' | 'campaigns' | 'broadcasts'>('homepage');
+
+  // Broadcast state
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [channel, setChannel] = useState<'both' | 'whatsapp' | 'email'>('both');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [activeBookingsCount, setActiveBookingsCount] = useState<number | null>(null);
+  const [countLoading, setCountLoading] = useState(false);
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [activePreviewTab, setActivePreviewTab] = useState<'whatsapp' | 'email'>('whatsapp');
+
+  useEffect(() => {
+    if (channel === 'whatsapp') {
+      setActivePreviewTab('whatsapp');
+    } else if (channel === 'email') {
+      setActivePreviewTab('email');
+    }
+  }, [channel]);
+
+  useEffect(() => {
+    if (!selectedEventId) {
+      setActiveBookingsCount(null);
+      return;
+    }
+    let alive = true;
+    setCountLoading(true);
+    async function loadCount() {
+      try {
+        const [confirmedRes, pendingRes] = await Promise.all([
+          fetchBookings({ page: 1, pageSize: 1, status: 'confirmed', eventId: selectedEventId }),
+          fetchBookings({ page: 1, pageSize: 1, status: 'pending', eventId: selectedEventId }),
+        ]);
+        if (alive) {
+          setActiveBookingsCount(confirmedRes.total + pendingRes.total);
+        }
+      } catch (err) {
+        console.error('Failed to fetch bookings count for event', err);
+        if (alive) {
+          setActiveBookingsCount(null);
+        }
+      } finally {
+        if (alive) {
+          setCountLoading(false);
+        }
+      }
+    }
+    void loadCount();
+    return () => {
+      alive = false;
+    };
+  }, [selectedEventId]);
+
+  const handleSendBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEventId) {
+      alert('Please select an experience.');
+      return;
+    }
+    setBroadcastSending(true);
+    setBroadcastError(null);
+    setBroadcastSuccess(null);
+    try {
+      const res = await bulkNotifyEventGuests(selectedEventId, {
+        message: broadcastMessage,
+        channel: channel,
+      });
+      setBroadcastSuccess(res.message || `Successfully queued notifications to ${res.notified_count} users.`);
+      setBroadcastMessage('');
+    } catch (err) {
+      setBroadcastError(err instanceof Error ? err.message : 'Failed to send bulk notifications.');
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
 
   // Campaigns state (from MockDataContext)
   const { campaigns, setCampaigns } = useMockData();
@@ -185,8 +260,8 @@ export const MarketingDirectory: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex max-w-md gap-1 rounded-2xl border border-slate-100 bg-white/40 p-1 backdrop-blur-sm">
-        {(['homepage', 'campaigns'] as const).map(t => (
+      <div className="flex max-w-xl gap-1 rounded-2xl border border-slate-100 bg-white/40 p-1 backdrop-blur-sm">
+        {(['homepage', 'campaigns', 'broadcasts'] as const).map(t => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -194,7 +269,7 @@ export const MarketingDirectory: React.FC = () => {
               activeTab === t ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
             }`}
           >
-            {t === 'homepage' ? 'Homepage Placement' : 'Campaign Operations'}
+            {t === 'homepage' ? 'Homepage Placement' : t === 'campaigns' ? 'Campaign Operations' : 'Bulk Announcements'}
           </button>
         ))}
       </div>
@@ -377,6 +452,213 @@ export const MarketingDirectory: React.FC = () => {
                 Launch campaign
               </Button>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'broadcasts' && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          {/* Left: Broadcast Form */}
+          <Card className="p-6">
+            <h3 className="text-lg font-bold text-ink">Send Bulk Announcement</h3>
+            <p className="text-xs text-mist mt-1 mb-5">Broadcast reminders or custom updates to all active bookings of an experience.</p>
+
+            <form onSubmit={handleSendBroadcast} className="space-y-5">
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="broadcastEvent">Select Experience</label>
+                <select
+                  id="broadcastEvent"
+                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
+                  value={selectedEventId}
+                  onChange={(e) => {
+                    setSelectedEventId(e.target.value);
+                    setBroadcastSuccess(null);
+                    setBroadcastError(null);
+                  }}
+                >
+                  <option value="">Choose an experience...</option>
+                  {allEvents.map((ev) => (
+                    <option key={ev.id} value={ev.id}>{ev.title} ({ev.hostName})</option>
+                  ))}
+                </select>
+
+                {selectedEventId && (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    {countLoading ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin text-brand-600" />
+                        <span className="text-[11px] font-medium text-slate-400">Loading guest count...</span>
+                      </>
+                    ) : activeBookingsCount !== null ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-700">
+                        {activeBookingsCount} active booking{activeBookingsCount !== 1 ? 's' : ''} targeted
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium text-rose-500">Error loading booking count</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-600">Notification Channel</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(['both', 'whatsapp', 'email'] as const).map((ch) => (
+                    <label
+                      key={ch}
+                      className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3.5 text-center transition hover:bg-slate-50 ${
+                        channel === ch
+                          ? 'border-brand-600 bg-brand-50/20 text-brand-700 font-bold'
+                          : 'border-slate-100 bg-white text-slate-500 font-medium'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="broadcastChannel"
+                        value={ch}
+                        checked={channel === ch}
+                        onChange={() => setChannel(ch)}
+                        className="sr-only"
+                      />
+                      <span className="text-xs uppercase tracking-wider">
+                        {ch === 'both' ? 'Both' : ch === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-600" htmlFor="broadcastMsg">
+                    Announcement Message <span className="font-normal text-slate-400">(Optional)</span>
+                  </label>
+                  <span className="text-[10px] font-semibold text-slate-400">
+                    Leave blank to send standard reminder
+                  </span>
+                </div>
+                <textarea
+                  id="broadcastMsg"
+                  rows={4}
+                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 resize-none"
+                  placeholder="e.g. Please bring comfortable shoes as we'll be walking outdoors..."
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                />
+              </div>
+
+              {broadcastError && (
+                <div className="rounded-xl bg-rose-50 p-3.5 text-xs font-semibold text-rose-600">
+                  {broadcastError}
+                </div>
+              )}
+
+              {broadcastSuccess && (
+                <div className="rounded-xl bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-700">
+                  {broadcastSuccess}
+                </div>
+              )}
+
+              <Button
+                variant="primary"
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 animate-none"
+                disabled={broadcastSending || !selectedEventId || (activeBookingsCount === 0 && !countLoading)}
+              >
+                {broadcastSending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {broadcastSending ? 'Sending Announcement...' : 'Send Bulk Announcement'}
+              </Button>
+            </form>
+          </Card>
+
+          {/* Right: Live Preview Pane */}
+          <Card className="p-6 flex flex-col h-full bg-slate-50/50">
+            <h3 className="text-sm font-bold text-ink">Live Broadcast Preview</h3>
+            <p className="text-xs text-mist mt-0.5 mb-5">See how notifications look before launching.</p>
+
+            {!selectedEventId ? (
+              <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-2xl p-6 text-center text-slate-400">
+                <LayoutGrid className="h-8 w-8 mb-2 stroke-[1.5] text-slate-300" />
+                <p className="text-xs font-medium">Select an experience to view notification previews</p>
+              </div>
+            ) : (
+              <div className="space-y-5 flex-1 overflow-y-auto">
+                {/* Channel Preview Selector */}
+                <div className="flex gap-2 p-0.5 bg-slate-100 rounded-xl max-w-xs">
+                  {['whatsapp', 'email'].map((tab) => {
+                    const isAllowed = channel === 'both' || channel === tab;
+                    const isActive = isAllowed && (channel === 'both' ? activePreviewTab === tab : channel === tab);
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        disabled={!isAllowed}
+                        onClick={() => setActivePreviewTab(tab as 'whatsapp' | 'email')}
+                        className={`flex-1 rounded-lg py-1.5 text-center text-[11px] font-bold uppercase transition ${
+                          isActive
+                            ? 'bg-white text-brand-700 shadow-sm'
+                            : isAllowed
+                            ? 'text-slate-500 hover:text-slate-700'
+                            : 'text-slate-300 cursor-not-allowed'
+                        }`}
+                      >
+                        {tab === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Preview Content */}
+                {((channel === 'both' && activePreviewTab === 'whatsapp') || channel === 'whatsapp') && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">WhatsApp Copy</span>
+                    <div className="rounded-2xl bg-[#DCF8C6] border border-[#d3ecd2] p-4 text-xs text-slate-800 shadow-sm max-w-sm ml-0">
+                      <p className="whitespace-pre-line leading-relaxed">
+                        {broadcastMessage.trim() ? (
+                          broadcastMessage
+                        ) : (
+                          `Hey [Guest Name]! 🌟\n\nQuick reminder that you are booked for *${
+                            allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience Title'
+                          }* by *${
+                            allEvents.find((e) => e.id === selectedEventId)?.hostName || 'Host Name'
+                          }* in *${
+                            allEvents.find((e) => e.id === selectedEventId)?.city || 'City'
+                          }*.\n\nGet ready for an amazing experience!`
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {((channel === 'both' && activePreviewTab === 'email') || channel === 'email') && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-700">Email Copy</span>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-800 shadow-sm space-y-3">
+                      <div>
+                        <span className="font-bold text-slate-400">Subject:</span>{' '}
+                        <span className="font-semibold text-ink">
+                          {broadcastMessage.trim()
+                            ? `Announcement: ${allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience'}`
+                            : `Reminder: ${allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience'}`}
+                        </span>
+                      </div>
+                      <div className="border-t border-slate-100 pt-3 leading-relaxed whitespace-pre-line text-slate-600">
+                        <p className="font-bold text-ink">Hi [Guest Name],</p>
+                        <p className="mt-2">
+                          {broadcastMessage.trim() ? (
+                            broadcastMessage
+                          ) : (
+                            `This is a quick reminder that your upcoming experience *${
+                              allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience Title'
+                            }* is scheduled soon.\n\nWe look forward to seeing you there!`
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
       )}
