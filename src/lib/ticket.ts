@@ -302,3 +302,44 @@ export async function downloadTicketPdf(eventId: string, booking: any, guestName
   const suffix = bookingId ? bookingId.slice(-6).toUpperCase() : 'booking';
   doc.save(`slotmate-ticket-${suffix}.pdf`);
 }
+
+// sendTicketNotificationPdf builds and uploads the ticket PDF to trigger a WhatsApp confirmation notification.
+export async function sendTicketNotificationPdf(eventId: string, booking: any, guestName: string, guestPhone: string): Promise<void> {
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  let event: any = { title: '' };
+  try {
+    event = await apiFetch<any>(`/events/${eventId}`);
+  } catch {
+    /* fall back to a minimal ticket */
+  }
+
+  const bookingId = String(booking?.id ?? '');
+  const verifyUrl = `https://myslotmate.com/experience/${eventId}/confirmation?booking=${bookingId}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=16304c&data=${encodeURIComponent(verifyUrl)}`;
+  const qrBase64 = await getBase64FromUrl(proxiedImage(qrUrl));
+
+  let coverBase64 = '';
+  if (event?.cover_image_url) {
+    coverBase64 = await getBase64FromUrl(proxiedImage(event.cover_image_url));
+  }
+
+  buildTicket(doc, event, booking, guestName, coverBase64, qrBase64, bookingId);
+  
+  // Output PDF as blob and convert to File
+  const pdfBlob = doc.output('blob') as Blob;
+  const suffix = bookingId ? bookingId.slice(-6).toUpperCase() : 'booking';
+  const pdfFile = new File([pdfBlob], `slotmate-ticket-${suffix}.pdf`, { type: 'application/pdf' });
+
+  const sendFormData = new FormData();
+  sendFormData.append('file', pdfFile);
+  sendFormData.append('phone', guestPhone);
+  sendFormData.append('eventName', event.title || '');
+  sendFormData.append('bookingId', bookingId);
+
+  await apiFetch<any>(`/bookings/${bookingId}/ticket-notification`, {
+    method: 'POST',
+    body: sendFormData,
+  });
+}

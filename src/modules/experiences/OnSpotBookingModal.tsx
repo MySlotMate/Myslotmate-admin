@@ -6,7 +6,7 @@ import { ApiError } from '../../api/client';
 import { initiateWalkIn, completeWalkIn, fetchEventOccurrences, lookupWalkInPhone } from '../../api/walkin';
 import type { EventOccurrence } from '../../api/walkin';
 import { loadRazorpay, openRazorpayCheckout } from '../../lib/razorpay';
-import { downloadTicketPdf } from '../../lib/ticket';
+import { downloadTicketPdf, sendTicketNotificationPdf } from '../../lib/ticket';
 import type { AdminEvent } from '../../api/directory';
 
 // Formats an RFC3339 instant in IST for display in the dropdown.
@@ -103,8 +103,16 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
     onClose();
   };
 
-  const finish = (created?: unknown) => {
-    if (created && typeof created === 'object') setBooking(created as typeof booking);
+  const finish = (created?: any) => {
+    if (created && typeof created === 'object') {
+      setBooking(created);
+      
+      // Send ticket confirmation on WhatsApp in background
+      const fullPhone = `+91${phone}`;
+      sendTicketNotificationPdf(event.id, created, name.trim(), fullPhone)
+        .then(() => console.log('[WhatsApp Notification] Sent successfully for walk-in'))
+        .catch((err) => console.error('[WhatsApp Notification] Failed to send for walk-in:', err));
+    }
     setLoading(false);
     setDone(true);
     onBooked?.();
