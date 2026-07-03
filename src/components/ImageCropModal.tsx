@@ -1,0 +1,299 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import ReactCrop, {
+  centerCrop,
+  makeAspectCrop,
+  type Crop,
+  type PixelCrop,
+} from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
+import { FiX, FiCheck, FiRotateCw } from "react-icons/fi";
+
+interface ImageCropModalProps {
+  /** File picked by the user. Null when the modal is closed. */
+  file: File | null;
+  /** Optional fixed aspect ratio (e.g. 16/9). Omit for fully freeform crop. */
+  aspect?: number;
+  outputType?: "image/jpeg" | "image/png";
+  /** Output quality 0-1 (JPEG only). */
+  quality?: number;
+  /** Max output dimension (px). The cropped image is downscaled to fit. */
+  maxDimension?: number;
+  onClose: () => void;
+  /** Called with the cropped Blob. The caller uploads. */
+  onConfirm: (blob: Blob, fileName: string) => void;
+}
+
+/**
+ * Reusable image crop modal using react-image-crop.
+ *
+ * Crop frame is drag-resizable from any corner / edge. When `aspect` is set,
+ * the frame keeps a fixed ratio; otherwise it's fully freeform.
+ */
+export function ImageCropModal({
+  file,
+  aspect,
+  outputType = "image/jpeg",
+  quality = 0.92,
+  maxDimension = 1920,
+  onClose,
+  onConfirm,
+}: ImageCropModalProps) {
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Crop | undefined>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const [rotation, setRotation] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number; ratioLabel: string } | null>(null);
+
+  // Read file → data URL whenever a new file is supplied.
+  useEffect(() => {
+    if (!file) {
+      setImageSrc(null);
+      setCrop(undefined);
+      setCompletedCrop(null);
+      setRotation(0);
+      setDimensions(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setImageSrc(reader.result as string);
+    reader.readAsDataURL(file);
+  }, [file]);
+
+  // Recalculate dimensions dynamically as the crop area changes
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || !completedCrop || !file) {
+      return;
+    }
+    const scaleX = img.naturalWidth / img.width;
+    const scaleY = img.naturalHeight / img.height;
+    
+    let width = Math.round(completedCrop.width * scaleX);
+    let height = Math.round(completedCrop.height * scaleY);
+    
+    const largest = Math.max(width, height);
+    if (largest > maxDimension) {
+      const scale = maxDimension / largest;
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+
+    if (width > 0 && height > 0) {
+      const ratio = width / height;
+      let ratioLabel = ratio.toFixed(2);
+      if (Math.abs(ratio - 4) < 0.02) ratioLabel = "4:1 (Banner)";
+      else if (Math.abs(ratio - 1.55) < 0.02) ratioLabel = "1.55:1";
+      else if (Math.abs(ratio - 16 / 9) < 0.02) ratioLabel = "16:9";
+      else if (Math.abs(ratio - 4 / 3) < 0.02) ratioLabel = "4:3";
+      else if (Math.abs(ratio - 3 / 2) < 0.02) ratioLabel = "3:2";
+      else if (Math.abs(ratio - 1) < 0.02) ratioLabel = "1:1";
+      
+      setDimensions({ width, height, ratioLabel });
+    }
+  }, [completedCrop, rotation, file, maxDimension, imageSrc]);
+
+  const onImageLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      const img = e.currentTarget;
+      const initial = aspect
+        ? centerCrop(
+            makeAspectCrop(
+              { unit: "%", width: 80 },
+              aspect,
+              img.naturalWidth,
+              img.naturalHeight,
+            ),
+            img.naturalWidth,
+            img.naturalHeight,
+          )
+        : centerCrop(
+            { unit: "%", x: 10, y: 10, width: 80, height: 80 },
+            img.naturalWidth,
+            img.naturalHeight,
+          );
+      setCrop(initial);
+    },
+    [aspect],
+  );
+
+  const handleConfirm = useCallback(async () => {
+    const img = imgRef.current;
+    if (!img || !completedCrop || !file) return;
+    setBusy(true);
+    try {
+      const blob = await getCroppedBlob(
+        img,
+        completedCrop,
+        rotation,
+        outputType,
+        quality,
+        maxDimension,
+      );
+      onConfirm(blob, file.name);
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    completedCrop,
+    rotation,
+    outputType,
+    quality,
+    maxDimension,
+    file,
+    onConfirm,
+  ]);
+
+  if (!file || !imageSrc) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="flex h-full max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Crop image</h2>
+            <p className="text-xs text-gray-500">
+              Drag the corners or edges to resize the crop area.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {dimensions && (
+              <div className="flex items-center gap-2 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-semibold text-[#0094CA] border border-sky-100">
+                <span>{dimensions.width} × {dimensions.height} px</span>
+                <span className="text-sky-200">|</span>
+                <span>Aspect: {dimensions.ratioLabel}</span>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
+              aria-label="Close"
+            >
+              <FiX size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-1 items-center justify-center overflow-auto bg-[#1f2937] p-4">
+          <ReactCrop
+            crop={crop}
+            onChange={(_, percentCrop) => setCrop(percentCrop)}
+            onComplete={(c) => setCompletedCrop(c)}
+            aspect={aspect}
+            keepSelection
+            ruleOfThirds
+          >
+            <img
+              ref={imgRef}
+              src={imageSrc}
+              alt="Crop source"
+              onLoad={onImageLoad}
+              style={{
+                maxHeight: "70vh",
+                transform: `rotate(${rotation}deg)`,
+              }}
+            />
+          </ReactCrop>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-gray-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setRotation((r) => (r + 90) % 360)}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 cursor-pointer"
+          >
+            <FiRotateCw size={14} />
+            Rotate
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleConfirm()}
+            disabled={busy || !completedCrop}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#0094CA] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#007ba8] disabled:opacity-50 cursor-pointer"
+          >
+            <FiCheck size={16} />
+            {busy ? "Processing…" : "Apply"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function getCroppedBlob(
+  img: HTMLImageElement,
+  crop: PixelCrop,
+  rotation: number,
+  outputType: "image/jpeg" | "image/png",
+  quality: number,
+  maxDimension: number,
+): Promise<Blob> {
+  const scaleX = img.naturalWidth / img.width;
+  const scaleY = img.naturalHeight / img.height;
+
+  const cropX = crop.x * scaleX;
+  const cropY = crop.y * scaleY;
+  const cropW = crop.width * scaleX;
+  const cropH = crop.height * scaleY;
+
+  const safeSize = Math.max(img.naturalWidth, img.naturalHeight) * 2;
+  const buffer = document.createElement("canvas");
+  buffer.width = safeSize;
+  buffer.height = safeSize;
+  const bctx = buffer.getContext("2d");
+  if (!bctx) throw new Error("Canvas 2D context unavailable");
+
+  bctx.translate(safeSize / 2, safeSize / 2);
+  bctx.rotate((rotation * Math.PI) / 180);
+  bctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+
+  const offsetX = safeSize / 2 - img.naturalWidth / 2;
+  const offsetY = safeSize / 2 - img.naturalHeight / 2;
+
+  const out = document.createElement("canvas");
+  out.width = cropW;
+  out.height = cropH;
+  const octx = out.getContext("2d");
+  if (!octx) throw new Error("Canvas 2D context unavailable");
+  octx.drawImage(
+    buffer,
+    cropX + offsetX,
+    cropY + offsetY,
+    cropW,
+    cropH,
+    0,
+    0,
+    cropW,
+    cropH,
+  );
+
+  let finalCanvas = out;
+  const largest = Math.max(out.width, out.height);
+  if (largest > maxDimension) {
+    const scale = maxDimension / largest;
+    const scaled = document.createElement("canvas");
+    scaled.width = Math.round(out.width * scale);
+    scaled.height = Math.round(out.height * scale);
+    const sctx = scaled.getContext("2d");
+    if (!sctx) throw new Error("Canvas 2D context unavailable");
+    sctx.drawImage(out, 0, 0, scaled.width, scaled.height);
+    finalCanvas = scaled;
+  }
+
+  return new Promise<Blob>((resolve, reject) => {
+    finalCanvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Canvas toBlob returned null"));
+      },
+      outputType,
+      quality,
+    );
+  });
+}

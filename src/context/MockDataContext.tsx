@@ -7,7 +7,6 @@ import type {
   CityData, 
   Review, 
   Report, 
-  Blog, 
   Campaign, 
   NotificationBroadcast, 
   AdminRole 
@@ -28,8 +27,6 @@ interface MockDataContextType {
   setReviews: React.Dispatch<React.SetStateAction<Review[]>>;
   reports: Report[];
   setReports: React.Dispatch<React.SetStateAction<Report[]>>;
-  blogs: Blog[];
-  setBlogs: React.Dispatch<React.SetStateAction<Blog[]>>;
   campaigns: Campaign[];
   setCampaigns: React.Dispatch<React.SetStateAction<Campaign[]>>;
   notifications: NotificationBroadcast[];
@@ -114,73 +111,6 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     { reportId: 'RP-327', reportedBy: 'Trust & safety', reporterType: 'Host', experience: 'Old Delhi Food Stories', issueType: 'Background verification refresh', status: 'Open', date: '06 Apr 2026' },
   ]);
 
-  // 8. Blogs state
-  const [blogs, setBlogs] = useState<Blog[]>([
-    {
-      blogId: 'BLG-301',
-      title: '10 Unique Experiences in Guwahati',
-      slug: '10-unique-experiences-in-guwahati',
-      author: 'Meera Dutta',
-      category: 'City Guides',
-      status: 'Published',
-      publishedDate: '06 Apr 2026',
-      views: 18420,
-      description: 'From riverfront walks to hidden food corners and creator-led workshops, here is a curated guide to memorable things to do in Guwahati.',
-      content: `A softer side of Guwahati
-Guwahati has become one of the most interesting cities for locally hosted experiences. Travelers are increasingly choosing slower, creator-led activities over traditional sightseeing.
-This editorial draft highlights riverside mornings, independent studios, food walks, and cultural sessions that fit the MySlotMate style of intentional discovery.
-Use this editor area later for a real WYSIWYG or markdown-powered publishing workflow.`,
-      tags: 'guwahati, city guide, local experiences, travel ideas',
-      seoTitle: '10 Unique Experiences in Guwahati | MySlotMate Blog',
-      seoDescription: 'Explore 10 unique experiences in Guwahati, from local walks to creative sessions and food-led activities curated by MySlotMate.'
-    },
-    {
-      blogId: 'BLG-302',
-      title: 'How to Host Your First Experience',
-      slug: 'how-to-host-your-first-experience',
-      author: 'Aarav Sharma',
-      category: 'Host Education',
-      status: 'Draft',
-      publishedDate: 'Not published',
-      views: 2184,
-      description: 'Step by step guide on building your listing, gathering initial bookings, and facilitating experiences.',
-      content: 'Learn how to construct your itinerary, establish pricing rules, and prep your venue details for your first slots.',
-      tags: 'hosting, tutorial, creator success',
-      seoTitle: 'How to Host Your First Experience | MySlotMate',
-      seoDescription: 'Host tutorial from MySlotMate.'
-    },
-    {
-      blogId: 'BLG-303',
-      title: 'Creative Weekend Activities',
-      slug: 'creative-weekend-activities',
-      author: 'Naina Kapoor',
-      category: 'Weekend Plans',
-      status: 'Published',
-      publishedDate: '28 Mar 2026',
-      views: 12036,
-      description: 'A round up of workshops, art groups, and craft circles to join this weekend.',
-      content: 'Unplug and design something with your hands. We review five top craft circles active this season.',
-      tags: 'crafts, workshops, weekend plans',
-      seoTitle: 'Creative Weekend Activities | Blog',
-      seoDescription: 'Weekend activities guide.'
-    },
-    {
-      blogId: 'BLG-304',
-      title: 'Best Wellness Sessions to Book This Month',
-      slug: 'best-wellness-sessions-to-book-this-month',
-      author: 'Mira D\'Souza',
-      category: 'Wellness',
-      status: 'Draft',
-      publishedDate: 'Not published',
-      views: 864,
-      description: 'Sound baths, dynamic breathwork, and outdoor meditation camps around Goa and Mumbai.',
-      content: 'Find mental clarity in curated nature spaces. Here are the leading therapists hosting classes this month.',
-      tags: 'wellness, health, outdoor',
-      seoTitle: 'Wellness Sessions | MySlotMate',
-      seoDescription: 'Curated wellness listing collections.'
-    }
-  ]);
-
   // 9. Campaigns state
   const [campaigns, setCampaigns] = useState<Campaign[]>([
     { name: 'Weekend wellness in Mumbai', audience: 'Lapsed users', channel: 'Email + push', spend: 4200, bookings: 284, roas: '4.1x', status: 'Running' },
@@ -224,7 +154,6 @@ Use this editor area later for a real WYSIWYG or markdown-powered publishing wor
       cities, setCities,
       reviews, setReviews,
       reports, setReports,
-      blogs, setBlogs,
       campaigns, setCampaigns,
       notifications, setNotifications,
       adminRoles, setAdminRoles,

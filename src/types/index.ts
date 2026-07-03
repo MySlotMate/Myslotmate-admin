@@ -78,19 +78,18 @@ export interface Report {
 }
 
 export interface Blog {
-  blogId: string;
+  id: string;
   title: string;
-  slug: string;
-  author: string;
+  description: string | null;
   category: string;
-  status: 'Draft' | 'Published';
-  publishedDate: string;
-  views: number;
-  description: string;
   content: string;
-  tags: string;
-  seoTitle: string;
-  seoDescription: string;
+  cover_image_url: string | null;
+  author_id: string;
+  author_name: string;
+  read_time_minutes: number;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Campaign {

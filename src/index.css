@@ -32,3 +32,150 @@ body {
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Rich text content — shared styles for the TipTap editor body and  */
+/*  the read-only RichTextView. Tailwind v4 preflight resets headings */
+/*  and lists, so we use !important to override inside this scope.    */
+/* ------------------------------------------------------------------ */
+.rich-text-content {
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.rich-text-content h1,
+.rich-text-content h2,
+.rich-text-content h3 {
+  color: #16304c;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  margin: 0.6em 0 0.3em !important;
+}
+
+.rich-text-content h1 {
+  font-size: 1.6rem !important;
+}
+
+.rich-text-content h2 {
+  font-size: 1.3rem !important;
+}
+
+.rich-text-content h3 {
+  font-size: 1.1rem !important;
+}
+
+.rich-text-content p {
+  margin: 0.4em 0 !important;
+}
+
+.rich-text-content ul,
+.rich-text-content ol {
+  margin: 0.4em 0 !important;
+  padding-left: 1.5rem !important;
+}
+
+.rich-text-content ul {
+  list-style: disc outside !important;
+}
+
+.rich-text-content ol {
+  list-style: decimal outside !important;
+}
+
+.rich-text-content li {
+  margin: 0.15em 0 !important;
+  display: list-item !important;
+}
+
+.rich-text-content li::marker {
+  color: #16304c;
+}
+
+.rich-text-content strong {
+  font-weight: 700;
+}
+
+.rich-text-content em {
+  font-style: italic;
+}
+
+.rich-text-content u {
+  text-decoration: underline;
+}
+
+.rich-text-content a {
+  color: #0e8ae0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Inline heading-style marks — applied to selection, not whole line. */
+.rich-text-content .rt-h1,
+.rich-text-content .rt-h2,
+.rich-text-content .rt-h3 {
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.rich-text-content .rt-h1 {
+  font-size: 1.6rem;
+}
+
+.rich-text-content .rt-h2 {
+  font-size: 1.3rem;
+}
+
+.rich-text-content .rt-h3 {
+  font-size: 1.1rem;
+}
+
+/* Inline images inserted via the rich text editor */
+.rich-text-content img.rt-image,
+.rich-text-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0;
+  display: block;
+}
+
+/* Wrapper around an editor image */
+.rt-image-wrapper {
+  position: relative;
+  display: block;
+  margin: 0.6em 0;
+  max-width: 100%;
+}
+
+.rt-image-wrapper img {
+  width: 100%;
+}
+
+.rt-image-wrapper[data-selected="true"] img {
+  outline: 2px solid #0094ca;
+  outline-offset: 2px;
+}
+
+.rt-image-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #0094ca;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  cursor: nwse-resize;
+  z-index: 5;
+}
+
+/* TipTap placeholder support */
+.rich-text-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
