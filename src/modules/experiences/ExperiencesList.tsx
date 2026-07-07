@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { IndianRupee } from 'lucide-react';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
@@ -28,6 +29,7 @@ const statusColor = (status: string): 'green' | 'blue' | 'amber' | 'rose' => {
 };
 
 export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery }) => {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -84,9 +86,14 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
             Review listings, feature standout sessions, and suspend risky inventory.
           </h3>
         </div>
-        <Button variant="primary" onClick={() => alert('Creating featured category landing page...')}>
-          Create featured collection
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={() => alert('Creating featured category landing page...')}>
+            Create featured collection
+          </Button>
+          <Button variant="primary" onClick={() => navigate('/experiences/new')}>
+            + Create experience
+          </Button>
+        </div>
       </div>
 
       {/* Filter panel */}

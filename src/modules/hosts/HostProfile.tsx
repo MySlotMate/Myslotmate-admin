@@ -7,7 +7,8 @@ import { Button } from '../../components/ui/Button';
 import { Table } from '../../components/ui/Table';
 import { fetchHostDetail, fetchHostEvents } from '../../api/directory';
 import type { HostDetail, HostEvent } from '../../api/directory';
-import { updateHostApplicationStatus } from '../../api/hosts';
+import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig } from '../../api/hosts';
+import type { PlatformFeeConfig } from '../../api/hosts';
 import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
 
@@ -21,6 +22,11 @@ export const HostProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingStatus, setSavingStatus] = useState(false);
+
+  const [feeInput, setFeeInput] = useState('');
+  const [savingFee, setSavingFee] = useState(false);
+  const [feeError, setFeeError] = useState<string | null>(null);
+  const [defaultFee, setDefaultFee] = useState<PlatformFeeConfig | null>(null);
 
   const [tab, setTab] = useState<Tab>('details');
   const [events, setEvents] = useState<HostEvent[] | null>(null);
@@ -45,7 +51,11 @@ export const HostProfile: React.FC = () => {
     setEventsLoading(true);
     setEventsError(null);
     try {
-      setEvents(await fetchHostEvents(hostId));
+      // The `events === null` check below distinguishes "not fetched yet" from
+      // "fetched, zero results" — normalize away any null/undefined response
+      // (e.g. a host with no events) so a real empty result doesn't get
+      // mistaken for "still needs fetching" and re-trigger forever.
+      setEvents((await fetchHostEvents(hostId)) ?? []);
     } catch (err) {
       setEventsError(err instanceof Error ? err.message : 'Failed to load events.');
     } finally {
@@ -54,6 +64,17 @@ export const HostProfile: React.FC = () => {
   }, [hostId]);
 
   useEffect(() => { void loadDetail(); }, [loadDetail]);
+
+  // The global default split is the same for every host — fetch it once so
+  // "using default" can show actual numbers instead of just a label.
+  useEffect(() => {
+    fetchPlatformFeeConfig().then(setDefaultFee).catch(() => setDefaultFee(null));
+  }, []);
+
+  // Keep the fee input in sync with the loaded host (e.g. after a save).
+  useEffect(() => {
+    setFeeInput(detail?.host.platform_fee_percentage != null ? String(detail.host.platform_fee_percentage) : '');
+  }, [detail]);
 
   // Lazily load events the first time the Events tab is opened.
   useEffect(() => {
@@ -73,6 +94,40 @@ export const HostProfile: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to update status.');
     } finally {
       setSavingStatus(false);
+    }
+  };
+
+  const handleSaveFee = async () => {
+    if (!hostId) return;
+    const trimmed = feeInput.trim();
+    const pct = trimmed === '' ? null : Number(trimmed);
+    if (pct !== null && (!Number.isInteger(pct) || pct < 0 || pct > 100)) {
+      setFeeError('Enter a whole number between 0 and 100.');
+      return;
+    }
+    setSavingFee(true);
+    setFeeError(null);
+    try {
+      await setHostPlatformFee(hostId, pct);
+      await loadDetail();
+    } catch (err) {
+      setFeeError(err instanceof Error ? err.message : 'Failed to update commission split.');
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
+  const handleResetFee = async () => {
+    if (!hostId) return;
+    setSavingFee(true);
+    setFeeError(null);
+    try {
+      await setHostPlatformFee(hostId, null);
+      await loadDetail();
+    } catch (err) {
+      setFeeError(err instanceof Error ? err.message : 'Failed to reset commission split.');
+    } finally {
+      setSavingFee(false);
     }
   };
 
@@ -150,6 +205,43 @@ export const HostProfile: React.FC = () => {
         <StatCard label="Net revenue" value={stats.revenueGenerated.toLocaleString()} rupee />
         <StatCard label="Avg rating" value={`${rating}${host.total_reviews ? ` · ${host.total_reviews} reviews` : ''}`} />
       </div>
+
+      {/* Commission split */}
+      <Card className="p-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-700">Commission split</h4>
+            <p className="mt-1 text-sm text-slate-500">
+              {host.platform_fee_percentage != null
+                ? `Custom split: host keeps ${100 - host.platform_fee_percentage}% · platform keeps ${host.platform_fee_percentage}%`
+                : defaultFee
+                ? `Using the platform default: host keeps ${defaultFee.host_percentage}% · platform keeps ${defaultFee.platform_percentage}%`
+                : 'Using the platform-wide default split for this host.'}
+            </p>
+          </div>
+          <div className="flex items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
+              Platform %
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={feeInput}
+                onChange={(e) => setFeeInput(e.target.value)}
+                placeholder="Default"
+                disabled={savingFee}
+                className="w-24 rounded-xl border border-brand-100 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-400 disabled:opacity-50"
+              />
+            </label>
+            <Button variant="primary" disabled={savingFee} onClick={() => void handleSaveFee()}>Save</Button>
+            {host.platform_fee_percentage != null && (
+              <Button variant="action" disabled={savingFee} onClick={() => void handleResetFee()}>Reset to default</Button>
+            )}
+          </div>
+        </div>
+        {feeError && <p className="mt-3 text-sm font-semibold text-rose-600">{feeError}</p>}
+      </Card>
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200">

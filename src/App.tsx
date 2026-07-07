@@ -11,6 +11,7 @@ import { UsersDirectory } from './modules/users/UsersDirectory';
 import { HostsDirectory } from './modules/hosts/HostsDirectory';
 import { HostProfile } from './modules/hosts/HostProfile';
 import { ExperiencesList } from './modules/experiences/ExperiencesList';
+import { CreateExperience } from './modules/experiences/CreateExperience';
 import { BookingsDirectory } from './modules/bookings/BookingsDirectory';
 import { PaymentsDirectory } from './modules/payments/PaymentsDirectory';
 import { CitiesDirectory } from './modules/cities/CitiesDirectory';
@@ -76,6 +77,7 @@ const AppContent: React.FC = () => {
                 <Route path="/hosts" element={<HostsDirectory searchQuery={globalSearch} />} />
                 <Route path="/hosts/:hostId" element={<HostProfile />} />
                 <Route path="/experiences" element={<ExperiencesList searchQuery={globalSearch} />} />
+                <Route path="/experiences/new" element={<CreateExperience />} />
                 <Route path="/bookings" element={<BookingsDirectory searchQuery={globalSearch} />} />
                 <Route path="/payments" element={<PaymentsDirectory />} />
                 <Route path="/cities" element={<CitiesDirectory />} />

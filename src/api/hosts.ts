@@ -26,3 +26,28 @@ export function updateHostApplicationStatus(
     body: { status },
   });
 }
+
+// setHostPlatformFee overrides this host's commission split — platformPercentage
+// is the platform's cut (host keeps the remainder). Pass null to clear the
+// override and fall back to the platform-wide default.
+export function setHostPlatformFee(
+  hostId: string,
+  platformPercentage: number | null,
+): Promise<unknown> {
+  return apiFetch(`/admin/hosts/${hostId}/platform-fee`, {
+    method: 'PUT',
+    body: { platform_percentage: platformPercentage },
+  });
+}
+
+export interface PlatformFeeConfig {
+  host_percentage: number;
+  platform_percentage: number;
+}
+
+// fetchPlatformFeeConfig returns the effective global commission split — the
+// fallback applied to any host without a per-host override (see
+// setHostPlatformFee above).
+export function fetchPlatformFeeConfig(): Promise<PlatformFeeConfig> {
+  return apiFetch<PlatformFeeConfig>('/admin/platform/fee-config');
+}

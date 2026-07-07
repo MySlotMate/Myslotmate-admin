@@ -89,6 +89,10 @@ export interface HostRecord {
   social_website?: string;
   avg_rating?: number;
   total_reviews?: number;
+  // Per-host commission override — the platform's cut of this host's
+  // bookings (host keeps the remainder). null/undefined means the platform-
+  // wide default split applies.
+  platform_fee_percentage?: number | null;
   created_at: string;
 }
 
