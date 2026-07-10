@@ -78,6 +78,7 @@ export interface HostRecord {
   expertise_tags?: string[];
   group_size?: number;
   government_id_url?: string;
+  gallery_urls?: string[];
   submitted_at?: string;
   approved_at?: string;
   rejected_at?: string;

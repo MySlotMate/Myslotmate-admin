@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, IndianRupee, ExternalLink } from 'lucide-react';
+import { ArrowLeft, IndianRupee, ExternalLink, Pencil } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -11,6 +11,7 @@ import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig
 import type { PlatformFeeConfig } from '../../api/hosts';
 import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
+import { EditHostProfileModal } from './EditHostProfileModal';
 
 type Tab = 'details' | 'events';
 
@@ -27,6 +28,8 @@ export const HostProfile: React.FC = () => {
   const [savingFee, setSavingFee] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
   const [defaultFee, setDefaultFee] = useState<PlatformFeeConfig | null>(null);
+
+  const [editing, setEditing] = useState(false);
 
   const [tab, setTab] = useState<Tab>('details');
   const [events, setEvents] = useState<HostEvent[] | null>(null);
@@ -178,9 +181,14 @@ export const HostProfile: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <Badge color={statusColor(host.application_status)} className="px-4 py-1.5 text-sm">
-              {STATUS_LABELS[host.application_status] ?? host.application_status}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil className="mr-1.5 h-4 w-4" /> Edit profile
+              </Button>
+              <Badge color={statusColor(host.application_status)} className="px-4 py-1.5 text-sm">
+                {STATUS_LABELS[host.application_status] ?? host.application_status}
+              </Badge>
+            </div>
             <label className="flex items-center gap-2 text-xs font-bold text-slate-500">
               Set status
               <select
@@ -255,6 +263,15 @@ export const HostProfile: React.FC = () => {
         <DetailsTab host={host} user={user} />
       ) : (
         <EventsTab events={events} loading={eventsLoading} error={eventsError} onRetry={() => void loadEvents()} />
+      )}
+
+      {editing && (
+        <EditHostProfileModal
+          host={host}
+          isOpen={editing}
+          onClose={() => setEditing(false)}
+          onSaved={() => void loadDetail()}
+        />
       )}
     </div>
   );
