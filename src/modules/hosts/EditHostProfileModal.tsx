@@ -43,6 +43,7 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
   const [isIdentityVerified, setIsIdentityVerified] = useState(!!host.is_identity_verified);
   const [isSuperHost, setIsSuperHost] = useState(!!host.is_super_host);
   const [isCommunityChamp, setIsCommunityChamp] = useState(!!host.is_community_champ);
+  const [isProfessional, setIsProfessional] = useState(!!host.is_professional);
 
   const [avatarUrl, setAvatarUrl] = useState(host.avatar_url ?? '');
   const [cropFile, setCropFile] = useState<File | null>(null);
@@ -118,6 +119,7 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
       is_identity_verified: isIdentityVerified,
       is_super_host: isSuperHost,
       is_community_champ: isCommunityChamp,
+      is_professional: isProfessional,
     };
     setSaving(true);
     try {
@@ -257,6 +259,7 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
                 <CheckboxField label="Identity verified" checked={isIdentityVerified} onChange={setIsIdentityVerified} disabled={busy} />
                 <CheckboxField label="Super Host" checked={isSuperHost} onChange={setIsSuperHost} disabled={busy} />
                 <CheckboxField label="Community Champ" checked={isCommunityChamp} onChange={setIsCommunityChamp} disabled={busy} />
+                <CheckboxField label="Professional" checked={isProfessional} onChange={setIsProfessional} disabled={busy} />
               </div>
             </div>
           </section>

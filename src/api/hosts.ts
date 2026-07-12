@@ -79,6 +79,7 @@ export interface HostProfileUpdate {
   is_identity_verified?: boolean;
   is_super_host?: boolean;
   is_community_champ?: boolean;
+  is_professional?: boolean;
 }
 
 // updateHostProfile saves an admin edit of a host's profile and returns the

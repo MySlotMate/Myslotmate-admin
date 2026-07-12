@@ -85,6 +85,7 @@ export interface HostRecord {
   is_identity_verified?: boolean;
   is_super_host?: boolean;
   is_community_champ?: boolean;
+  is_professional?: boolean;
   social_instagram?: string;
   social_linkedin?: string;
   social_website?: string;
