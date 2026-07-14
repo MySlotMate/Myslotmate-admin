@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Table } from '../../components/ui/Table';
 import { fetchHostDetail, fetchHostEvents } from '../../api/directory';
 import type { HostDetail, HostEvent } from '../../api/directory';
-import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig } from '../../api/hosts';
+import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive } from '../../api/hosts';
 import type { PlatformFeeConfig } from '../../api/hosts';
 import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
@@ -100,6 +100,26 @@ export const HostProfile: React.FC = () => {
     }
   };
 
+  const [togglingActive, setTogglingActive] = useState(false);
+  const handleToggleActive = async () => {
+    if (!hostId || !detail) return;
+    const currentlyActive = detail.host.is_active !== false;
+    const confirmMsg = currentlyActive
+      ? 'Deactivate this host? They and their experiences will be hidden from the public site. Bookings and history are kept, and you can reactivate anytime.'
+      : 'Reactivate this host? They and their experiences will be visible on the public site again.';
+    if (!window.confirm(confirmMsg)) return;
+    setTogglingActive(true);
+    setError(null);
+    try {
+      await setHostActive(hostId, !currentlyActive);
+      await loadDetail();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update host.');
+    } finally {
+      setTogglingActive(false);
+    }
+  };
+
   const handleSaveFee = async () => {
     if (!hostId) return;
     const trimmed = feeInput.trim();
@@ -185,9 +205,26 @@ export const HostProfile: React.FC = () => {
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 <Pencil className="mr-1.5 h-4 w-4" /> Edit profile
               </Button>
+              <Button
+                variant={host.is_active === false ? 'primary' : 'secondary'}
+                className={
+                  host.is_active === false
+                    ? ''
+                    : 'border-red-200 text-red-600 hover:border-red-300 hover:text-red-700'
+                }
+                disabled={togglingActive}
+                onClick={() => void handleToggleActive()}
+              >
+                {host.is_active === false ? 'Reactivate' : 'Deactivate'}
+              </Button>
               <Badge color={statusColor(host.application_status)} className="px-4 py-1.5 text-sm">
                 {STATUS_LABELS[host.application_status] ?? host.application_status}
               </Badge>
+              {host.is_active === false && (
+                <Badge color="rose" className="px-4 py-1.5 text-sm">
+                  Deactivated
+                </Badge>
+              )}
             </div>
             <label className="flex items-center gap-2 text-xs font-bold text-slate-500">
               Set status

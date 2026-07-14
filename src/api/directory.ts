@@ -86,6 +86,7 @@ export interface HostRecord {
   is_super_host?: boolean;
   is_community_champ?: boolean;
   is_professional?: boolean;
+  is_active?: boolean;
   social_instagram?: string;
   social_linkedin?: string;
   social_website?: string;
@@ -147,6 +148,7 @@ export function fetchHostEvents(hostId: string): Promise<HostEvent[]> {
 
 export interface AdminEvent {
   id: string;
+  host_id: string;
   title: string;
   hostName: string;
   city: string;

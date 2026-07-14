@@ -11,3 +11,23 @@ const IST_OFFSET = '+05:30';
 export function istInputToUTCISO(dateStr: string, timeStr: string): string {
   return new Date(`${dateStr}T${timeStr}:00${IST_OFFSET}`).toISOString();
 }
+
+// Reverse of istInputToUTCISO: turn a stored UTC ISO instant into the IST-local
+// date ("YYYY-MM-DD") and time ("HH:mm") strings for prefilling form inputs.
+export function utcToISTInputs(iso: string): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const hour = get('hour') === '24' ? '00' : get('hour');
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${hour}:${get('minute')}`,
+  };
+}

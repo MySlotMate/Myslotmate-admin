@@ -16,6 +16,15 @@ export function rejectHost(hostId: string, reason: string): Promise<unknown> {
   });
 }
 
+// setHostActive deactivates (active=false) or reactivates (active=true) a host.
+// Deactivation hides the host + their events from the public site; data is kept.
+export function setHostActive(hostId: string, active: boolean): Promise<unknown> {
+  return apiFetch(`/admin/hosts/${hostId}/active`, {
+    method: 'PUT',
+    body: { active },
+  });
+}
+
 // updateHostApplicationStatus sets a host's application status to any valid
 // value (admin override).
 export function updateHostApplicationStatus(

@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/Card';
 import { Pagination } from '../../components/ui/Pagination';
 import { fetchEvents } from '../../api/directory';
 import type { AdminEvent } from '../../api/directory';
+import { deleteEvent } from '../../api/events';
 import { OnSpotBookingModal } from './OnSpotBookingModal';
 
 interface ExperiencesListProps {
@@ -76,6 +77,28 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const handleDelete = async (exp: AdminEvent) => {
+    if (
+      !window.confirm(
+        `Delete "${exp.title}" permanently? This can't be undone. (Blocked if it still has active bookings — cancel it first.)`,
+      )
+    )
+      return;
+    setDeletingId(exp.id);
+    setError(null);
+    try {
+      await deleteEvent(exp.id, exp.host_id);
+      await loadEvents();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to delete experience.',
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -160,7 +183,18 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
                 <Badge color={statusColor(exp.status)}>{exp.status}</Badge>
               </td>
               <td className="px-6 py-4 align-top">
-                <Button variant="action" onClick={() => setBookingEvent(exp)}>On-spot booking</Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="action" onClick={() => navigate(`/experiences/${exp.id}/edit`)}>Edit</Button>
+                  <Button variant="action" onClick={() => setBookingEvent(exp)}>On-spot booking</Button>
+                  <Button
+                    variant="action"
+                    className="border-red-200 text-red-600 hover:border-red-300 hover:text-red-700"
+                    disabled={deletingId === exp.id}
+                    onClick={() => void handleDelete(exp)}
+                  >
+                    {deletingId === exp.id ? 'Deleting…' : 'Delete'}
+                  </Button>
+                </div>
               </td>
             </tr>
           ))}

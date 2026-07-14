@@ -9,7 +9,7 @@
 // not ported.
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   FiArrowLeft,
   FiArrowRight,
@@ -36,9 +36,11 @@ import { LocationSearchInput } from '../../components/LocationSearchInput';
 import { ToastHost } from '../../components/Toast';
 import { toast } from '../../lib/toast';
 import { useDragDrop } from '../../hooks/useDragDrop';
-import { istInputToUTCISO } from '../../lib/datetime';
+import { istInputToUTCISO, utcToISTInputs } from '../../lib/datetime';
 import {
   createEvent,
+  updateEvent,
+  fetchEventDetail,
   publishEvent,
   uploadFiles,
   listExperienceTemplates,
@@ -61,6 +63,9 @@ interface FormData {
   coverImagePreview: string | null;
   galleryImages: File[];
   galleryPreviews: string[];
+  // Edit mode: already-hosted image URLs to preserve when no new file replaces them.
+  existingCoverUrl: string | null;
+  existingGalleryUrls: string[];
   isOnline: boolean;
   location: string;
   meetingLink: string;
@@ -989,6 +994,9 @@ function SuccessModal({
 /* ------------------------------------------------------------------ */
 export const CreateExperience: React.FC = () => {
   const navigate = useNavigate();
+  const { id: editEventId } = useParams<{ id: string }>();
+  const isEdit = !!editEventId;
+  const [loadingEvent, setLoadingEvent] = useState(isEdit);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitType, setSubmitType] = useState<'draft' | 'publish' | null>(null);
@@ -1014,6 +1022,8 @@ export const CreateExperience: React.FC = () => {
     coverImagePreview: null,
     galleryImages: [],
     galleryPreviews: [],
+    existingCoverUrl: null,
+    existingGalleryUrls: [],
     isOnline: false,
     location: '',
     meetingLink: '',
@@ -1097,6 +1107,73 @@ export const CreateExperience: React.FC = () => {
   const updateForm = <K extends keyof FormData>(key: K, value: FormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
+
+  // Edit mode: load the event once and prefill the whole form.
+  useEffect(() => {
+    if (!editEventId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ev = await fetchEventDetail(editEventId);
+        if (cancelled) return;
+        const dt = utcToISTInputs(ev.time);
+        const endDt = ev.end_time ? utcToISTInputs(ev.end_time) : null;
+        const hasTiers = (ev.price_tiers?.length ?? 0) > 0;
+        setForm((prev) => ({
+          ...prev,
+          title: ev.title ?? '',
+          hookLine: ev.hook_line ?? '',
+          mood: ev.mood ?? '',
+          description: ev.description ?? '',
+          coverImagePreview: ev.cover_image_url ?? null,
+          existingCoverUrl: ev.cover_image_url ?? null,
+          galleryPreviews: ev.gallery_urls ?? [],
+          existingGalleryUrls: ev.gallery_urls ?? [],
+          isOnline: ev.is_online,
+          location: ev.location ?? '',
+          meetingLink: ev.meeting_link ?? '',
+          googleMapsUrl: ev.google_maps_url ?? '',
+          durationMinutes: ev.duration_minutes ?? 60,
+          minGroupSize: ev.min_group_size ?? 1,
+          maxGroupSize: ev.max_group_size ?? ev.capacity ?? 10,
+          languages: ev.languages ?? [],
+          level: ev.level ?? '',
+          isFree: ev.is_free,
+          priceCents: ev.price_cents ?? 0,
+          useTiers: hasTiers,
+          priceTiers: hasTiers
+            ? ev.price_tiers!.map((t) => ({
+                name: t.name,
+                priceStr: (t.price_cents / 100).toString(),
+              }))
+            : [{ name: '', priceStr: '' }],
+          eventDate: dt.date,
+          eventTime: dt.time,
+          endTime: endDt?.time ?? '',
+          isRecurring: ev.is_recurring,
+          recurrenceRule: ev.recurrence_rule ?? '',
+          cancellationPolicy: ev.cancellation_policy ?? 'flexible',
+          requiresAttendeeDetails: ev.requires_attendee_details,
+          attendeeFields: ev.attendee_fields ?? [],
+        }));
+        setPriceInputStr(
+          ev.is_free ? '' : ((ev.price_cents ?? 0) / 100).toString(),
+        );
+        // Lock the host to the event's owner (host can't change on edit).
+        setSelectedHost({ id: ev.host_id, name: 'Existing host', city: '' } as Host);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load experience.',
+        );
+      } finally {
+        if (!cancelled) setLoadingEvent(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editEventId]);
 
   // Ticket-tier row helpers (dynamic pricing).
   const addPriceTier = () =>
@@ -1274,13 +1351,15 @@ export const CreateExperience: React.FC = () => {
 
     try {
       // Upload images
-      let coverImageUrl: string | undefined;
-      let galleryUrls: string[] = [];
+      // Start from existing (already-hosted) URLs so an edit that doesn't touch
+      // images preserves them; newly picked files are uploaded and merged in.
+      let coverImageUrl: string | undefined = form.existingCoverUrl ?? undefined;
+      let galleryUrls: string[] = [...form.existingGalleryUrls];
 
       if (form.coverImage) {
         try {
           const uploadRes = await uploadFiles([form.coverImage], 'events/covers');
-          coverImageUrl = uploadRes[0]?.url;
+          if (uploadRes[0]?.url) coverImageUrl = uploadRes[0].url;
         } catch (uploadErr) {
           console.warn('Cover image upload failed:', uploadErr);
         }
@@ -1289,7 +1368,7 @@ export const CreateExperience: React.FC = () => {
       if (form.galleryImages.length > 0) {
         try {
           const uploadRes = await uploadFiles(form.galleryImages, 'events/gallery');
-          galleryUrls = uploadRes.map((r) => r.url);
+          galleryUrls = [...galleryUrls, ...uploadRes.map((r) => r.url)];
         } catch (uploadErr) {
           console.warn('Gallery upload failed:', uploadErr);
         }
@@ -1311,8 +1390,8 @@ export const CreateExperience: React.FC = () => {
         );
       }
 
-      // Create event
-      const created = await createEvent({
+      // Fields shared by create + update (everything except status).
+      const payload = {
         host_id: hostId,
         title: form.title.trim(),
         hook_line: form.hookLine.trim(),
@@ -1347,33 +1426,42 @@ export const CreateExperience: React.FC = () => {
         recurrence_rule: form.isRecurring ? form.recurrenceRule : undefined,
         cancellation_policy: form.cancellationPolicy,
         requires_attendee_details: form.requiresAttendeeDetails,
-        attendee_fields: form.requiresAttendeeDetails
-          ? form.attendeeFields
-          : [],
-        status: asDraft ? 'draft' : 'live',
-      });
+        attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
+      };
 
-      // Auto-publish only when "Publish Experience" was clicked.
-      if (!asDraft) {
-        try {
-          await publishEvent(created.id, hostId);
-        } catch (publishErr) {
-          console.warn('Auto-publish failed, event saved as draft:', publishErr);
+      if (isEdit && editEventId) {
+        // Edit: update in place, keep the event's existing publish status.
+        await updateEvent(editEventId, payload);
+        setCreatedEventId(editEventId);
+        setSavedAsDraft(false);
+        setShowSuccess(true);
+        toast.success('Experience updated successfully!');
+      } else {
+        const created = await createEvent({
+          ...payload,
+          status: asDraft ? 'draft' : 'live',
+        });
+        // Auto-publish only when "Publish Experience" was clicked.
+        if (!asDraft) {
+          try {
+            await publishEvent(created.id, hostId);
+          } catch (publishErr) {
+            console.warn('Auto-publish failed, event saved as draft:', publishErr);
+          }
         }
+        setCreatedEventId(created.id);
+        setSavedAsDraft(asDraft);
+        setShowSuccess(true);
+        toast.success(
+          asDraft
+            ? `Draft saved under ${selectedHost?.name ?? 'the host'}'s experiences.`
+            : 'Experience created successfully!',
+        );
       }
-
-      setCreatedEventId(created.id);
-      setSavedAsDraft(asDraft);
-      setShowSuccess(true);
-      toast.success(
-        asDraft
-          ? `Draft saved under ${selectedHost?.name ?? 'the host'}'s experiences.`
-          : 'Experience created successfully!'
-      );
     } catch (err) {
-      console.error('Failed to create experience:', err);
+      console.error('Failed to save experience:', err);
       toast.error(
-        err instanceof Error ? err.message : 'Failed to create experience. Please try again.'
+        err instanceof Error ? err.message : 'Failed to save experience. Please try again.'
       );
     } finally {
       setIsSubmitting(false);
@@ -1399,6 +1487,14 @@ export const CreateExperience: React.FC = () => {
   /* ---------------------------------------------------------------- */
   /*  Render                                                           */
   /* ---------------------------------------------------------------- */
+  if (loadingEvent) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0094CA] border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mx-auto max-w-4xl pb-24">
@@ -1411,9 +1507,13 @@ export const CreateExperience: React.FC = () => {
             <FiArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Create New Experience</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isEdit ? 'Edit Experience' : 'Create New Experience'}
+            </h1>
             <p className="text-sm text-gray-500">
-              Create and publish an experience on behalf of a host
+              {isEdit
+                ? 'Update this experience'
+                : 'Create and publish an experience on behalf of a host'}
             </p>
           </div>
         </div>
@@ -2272,20 +2372,22 @@ export const CreateExperience: React.FC = () => {
                   <FiArrowLeft size={16} />
                   <span>Back</span>
                 </button>
-                <button
-                  onClick={() => void handleSubmit(true)}
-                  disabled={isSubmitting}
-                  className="flex flex-1 items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white py-3.5 px-6 font-semibold text-gray-700 transition duration-300 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitType === 'draft' ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-500 border-t-transparent" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>Save as Draft</span>
-                  )}
-                </button>
+                {!isEdit && (
+                  <button
+                    onClick={() => void handleSubmit(true)}
+                    disabled={isSubmitting}
+                    className="flex flex-1 items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white py-3.5 px-6 font-semibold text-gray-700 transition duration-300 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {submitType === 'draft' ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-500 border-t-transparent" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save as Draft</span>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={() => void handleSubmit(false)}
                   disabled={isSubmitting}
@@ -2294,7 +2396,7 @@ export const CreateExperience: React.FC = () => {
                   {submitType === 'publish' ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>Publishing...</span>
+                      <span>{isEdit ? 'Saving...' : 'Publishing...'}</span>
                     </>
                   ) : (
                     <>
@@ -2302,7 +2404,7 @@ export const CreateExperience: React.FC = () => {
                         className="text-lg transition-transform group-hover:scale-110"
                         size={18}
                       />
-                      <span>Publish Experience</span>
+                      <span>{isEdit ? 'Save changes' : 'Publish Experience'}</span>
                     </>
                   )}
                 </button>
