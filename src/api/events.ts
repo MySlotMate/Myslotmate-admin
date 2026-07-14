@@ -5,6 +5,13 @@
 
 import { apiFetch } from './client';
 
+export interface PriceTierInput {
+  name: string;
+  price_cents: number;
+  capacity?: number | null;
+  sort_order?: number;
+}
+
 export interface EventCreatePayload {
   host_id: string;
   title: string;
@@ -33,6 +40,9 @@ export interface EventCreatePayload {
   meeting_link?: string;
   google_maps_url?: string;
   status?: 'draft' | 'live';
+  price_tiers?: PriceTierInput[];
+  requires_attendee_details?: boolean;
+  attendee_fields?: string[];
 }
 
 export interface CreatedEvent {
