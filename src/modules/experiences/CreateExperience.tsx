@@ -86,6 +86,7 @@ interface FormData {
   isRecurring: boolean;
   recurrenceRule: string;
   cancellationPolicy: string;
+  termsAndConditions: string;
   // Attendee details
   requiresAttendeeDetails: boolean;
   attendeeFields: string[];
@@ -1043,6 +1044,7 @@ export const CreateExperience: React.FC = () => {
     isRecurring: false,
     recurrenceRule: '',
     cancellationPolicy: 'flexible',
+    termsAndConditions: '',
     requiresAttendeeDetails: false,
     attendeeFields: [],
   });
@@ -1153,6 +1155,7 @@ export const CreateExperience: React.FC = () => {
           isRecurring: ev.is_recurring,
           recurrenceRule: ev.recurrence_rule ?? '',
           cancellationPolicy: ev.cancellation_policy ?? 'flexible',
+          termsAndConditions: ev.terms_and_conditions ?? '',
           requiresAttendeeDetails: ev.requires_attendee_details,
           attendeeFields: ev.attendee_fields ?? [],
         }));
@@ -1425,6 +1428,7 @@ export const CreateExperience: React.FC = () => {
         is_recurring: form.isRecurring,
         recurrence_rule: form.isRecurring ? form.recurrenceRule : undefined,
         cancellation_policy: form.cancellationPolicy,
+        terms_and_conditions: form.termsAndConditions.trim() || undefined,
         requires_attendee_details: form.requiresAttendeeDetails,
         attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
       };
@@ -2293,6 +2297,35 @@ export const CreateExperience: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Terms & Conditions — printed on the guest's ticket PDF */}
+              <div className="space-y-2 border-t border-gray-100 pt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    Terms &amp; Conditions
+                  </h3>
+                  <span className="text-xs text-gray-400">
+                    {form.termsAndConditions.length}/2000
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Specific to this experience. Shown on the guest&apos;s ticket
+                  PDF. Leave blank for none.
+                </p>
+                <textarea
+                  value={form.termsAndConditions}
+                  onChange={(e) => {
+                    if (e.target.value.length <= 2000)
+                      updateForm('termsAndConditions', e.target.value);
+                  }}
+                  maxLength={2000}
+                  rows={6}
+                  placeholder={
+                    'e.g.\n• Carry a valid photo ID.\n• Arrive 15 minutes early.\n• Non-transferable.'
+                  }
+                  className="w-full resize-y rounded-lg border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
+                />
               </div>
 
               {/* Attendee Details */}

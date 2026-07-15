@@ -43,6 +43,7 @@ export interface EventCreatePayload {
   price_tiers?: PriceTierInput[];
   requires_attendee_details?: boolean;
   attendee_fields?: string[];
+  terms_and_conditions?: string;
 }
 
 export interface CreatedEvent {
@@ -96,6 +97,7 @@ export interface EventDetail {
   price_tiers: { id: string; name: string; price_cents: number }[] | null;
   requires_attendee_details: boolean;
   attendee_fields: string[] | null;
+  terms_and_conditions: string | null;
 }
 
 export function fetchEventDetail(eventId: string): Promise<EventDetail> {
