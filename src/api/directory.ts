@@ -149,6 +149,7 @@ export function fetchHostEvents(hostId: string): Promise<HostEvent[]> {
 export interface AdminEvent {
   id: string;
   host_id: string;
+  is_recurring: boolean;
   title: string;
   hostName: string;
   city: string;

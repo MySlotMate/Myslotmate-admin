@@ -4,6 +4,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { apiFetch, apiBaseUrl } from '../api/client';
+import { pdfSafe } from './pdfText';
 
 // Routes a remote image through the backend so the browser can read it without
 // CORS issues (S3 covers and the QR service don't all send CORS headers).
@@ -69,7 +70,10 @@ function buildTicket(
   const startX = 55;
   const startY = 30;
   const width = 100;
-  const height = 165;
+  // Sized so the gold footer sits just below the Total row. Content ends at
+  // startY+124 (the Total baseline) and the footer is pinned to
+  // startY+height-12, so height=142 leaves a ~6mm gap instead of ~29mm.
+  const height = 142;
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(243, 244, 246);
@@ -94,14 +98,33 @@ function buildTicket(
   const imgW = 20;
   const imgH = 26;
   if (coverBase64) {
-    doc.addImage(coverBase64, 'PNG', imgX, imgY, imgW, imgH);
+    // Draw at the image's own aspect ratio, scaled to sit inside the reserved
+    // slot — don't stretch it to imgW x imgH. Covers are cropped wide (4:1), so
+    // forcing them into the tall box squashed them.
+    let drawX = imgX;
+    let drawY = imgY;
+    let drawW = imgW;
+    let drawH = imgH;
+    try {
+      const props = doc.getImageProperties(coverBase64);
+      if (props?.width && props?.height) {
+        const scale = Math.min(imgW / props.width, imgH / props.height);
+        drawW = props.width * scale;
+        drawH = props.height * scale;
+        drawX = imgX + (imgW - drawW) / 2;
+        drawY = imgY + (imgH - drawH) / 2;
+      }
+    } catch {
+      /* couldn't read dimensions — fall back to the reserved box */
+    }
+    doc.addImage(coverBase64, 'PNG', drawX, drawY, drawW, drawH);
   } else {
     doc.setFillColor(22, 48, 76);
     doc.roundedRect(imgX, imgY, imgW, imgH, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(255, 255, 255);
-    doc.text('SLOT', imgX + imgW / 2, imgY + 11, { align: 'center' });
+    doc.text('MYSLOT', imgX + imgW / 2, imgY + 11, { align: 'center' });
     doc.text('MATE', imgX + imgW / 2, imgY + 16, { align: 'center' });
   }
 
@@ -111,7 +134,7 @@ function buildTicket(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(17, 24, 39);
-  const titleText = (event?.title ?? 'EXPERIENCE TICKET').toUpperCase();
+  const titleText = pdfSafe(event?.title ?? 'EXPERIENCE TICKET').toUpperCase();
   const titleLines = doc.splitTextToSize(titleText, 52);
   doc.text(titleLines, textX, textY);
   textY += titleLines.length * 4.2 + 0.5;
@@ -120,7 +143,7 @@ function buildTicket(
   doc.setFontSize(6.5);
   doc.setTextColor(107, 114, 128);
   const langs = Array.isArray(event?.languages) ? event.languages.join('/') : 'English';
-  doc.text(`${event?.mood ?? 'Experience'} | ${langs}`, textX, textY);
+  doc.text(pdfSafe(`${event?.mood ?? 'Experience'} | ${langs}`), textX, textY);
   textY += 4.5;
 
   doc.setFont('helvetica', 'bold');
@@ -132,7 +155,9 @@ function buildTicket(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
   doc.setTextColor(107, 114, 128);
-  const venueText = (event?.is_online ? 'Online Meet Link' : (event?.location ?? 'TBD')).toUpperCase();
+  const venueText = pdfSafe(
+    event?.is_online ? 'Online Meet Link' : (event?.location ?? 'TBD'),
+  ).toUpperCase();
   doc.text(doc.splitTextToSize(venueText, 52), textX, textY);
 
   // Vertical M-TICKET
@@ -206,7 +231,7 @@ function buildTicket(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(17, 24, 39);
-  doc.text((guestName || 'Guest').toUpperCase(), infoCenter, innerY + 13.5, { align: 'center' });
+  doc.text(pdfSafe(guestName || 'Guest').toUpperCase(), infoCenter, innerY + 13.5, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
@@ -272,6 +297,42 @@ function buildTicket(
   doc.setFontSize(7);
   doc.setTextColor(146, 64, 14);
   doc.text('Scan QR code at the entrance to gain entry.', startX + width / 2, footerY + 7, { align: 'center' });
+
+  // Per-experience Terms & Conditions, printed below the ticket card. The card
+  // is fixed-height, so terms flow underneath and onto extra pages when long.
+  // Mirrors MySlotmate-Frontend confirmation-page PDF.
+  const terms = pdfSafe(event?.terms_and_conditions);
+  if (terms) {
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const bottomMargin = 15;
+    let y = startY + height + 12;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(22, 48, 76);
+    doc.text('TERMS & CONDITIONS', startX, y);
+    y += 4;
+
+    doc.setDrawColor(229, 231, 235);
+    doc.line(startX, y, startX + width, y);
+    y += 4;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(75, 85, 99);
+    const lines: string[] = doc.splitTextToSize(terms, width);
+    for (const line of lines) {
+      if (y > pageHeight - bottomMargin) {
+        doc.addPage();
+        y = 20;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(75, 85, 99);
+      }
+      doc.text(line, startX, y);
+      y += 3.2;
+    }
+  }
 }
 
 // downloadTicketPdf builds and saves the ticket PDF for a booking. It fetches

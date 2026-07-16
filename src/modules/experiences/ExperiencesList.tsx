@@ -8,8 +8,9 @@ import { Card } from '../../components/ui/Card';
 import { Pagination } from '../../components/ui/Pagination';
 import { fetchEvents } from '../../api/directory';
 import type { AdminEvent } from '../../api/directory';
-import { deleteEvent } from '../../api/events';
+import { deleteEvent, pauseEvent, resumeEvent } from '../../api/events';
 import { OnSpotBookingModal } from './OnSpotBookingModal';
+import { PauseExperienceModal } from './PauseExperienceModal';
 
 interface ExperiencesListProps {
   searchQuery: string;
@@ -77,6 +78,54 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  // Pause / resume. Pausing auto-refunds affected bookings (backend does it),
+  // so the modal spells that out before confirming.
+  const [pauseTarget, setPauseTarget] = useState<AdminEvent | null>(null);
+  const [pausing, setPausing] = useState(false);
+  const [resumingId, setResumingId] = useState<string | null>(null);
+
+  const handlePauseConfirm = async (opts: {
+    pausedFrom?: string;
+    pausedDate?: string;
+  }) => {
+    if (!pauseTarget) return;
+    setPausing(true);
+    setError(null);
+    try {
+      await pauseEvent(
+        pauseTarget.id,
+        pauseTarget.host_id,
+        opts.pausedFrom,
+        opts.pausedDate,
+      );
+      setPauseTarget(null);
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to pause experience.');
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  const handleResume = async (exp: AdminEvent) => {
+    if (
+      !window.confirm(
+        `Resume "${exp.title}"? It goes back live and all paused sessions are restored.`,
+      )
+    )
+      return;
+    setResumingId(exp.id);
+    setError(null);
+    try {
+      await resumeEvent(exp.id, exp.host_id);
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume experience.');
+    } finally {
+      setResumingId(null);
+    }
+  };
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const handleDelete = async (exp: AdminEvent) => {
@@ -185,6 +234,26 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
               <td className="px-6 py-4 align-top">
                 <div className="flex items-center gap-2">
                   <Button variant="action" onClick={() => navigate(`/experiences/${exp.id}/edit`)}>Edit</Button>
+                  {exp.status === 'paused' ? (
+                    <Button
+                      variant="action"
+                      className="border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800"
+                      disabled={resumingId === exp.id}
+                      onClick={() => void handleResume(exp)}
+                    >
+                      {resumingId === exp.id ? 'Resuming…' : 'Resume'}
+                    </Button>
+                  ) : (
+                    exp.status === 'live' && (
+                      <Button
+                        variant="action"
+                        className="border-amber-200 text-amber-700 hover:border-amber-300 hover:text-amber-800"
+                        onClick={() => setPauseTarget(exp)}
+                      >
+                        Pause
+                      </Button>
+                    )
+                  )}
                   <Button variant="action" onClick={() => setBookingEvent(exp)}>On-spot booking</Button>
                   <Button
                     variant="action"
@@ -216,6 +285,15 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
           isOpen={bookingEvent !== null}
           onClose={() => setBookingEvent(null)}
           onBooked={() => void loadEvents()}
+        />
+      )}
+
+      {pauseTarget && (
+        <PauseExperienceModal
+          event={pauseTarget}
+          saving={pausing}
+          onClose={() => setPauseTarget(null)}
+          onConfirm={(opts) => void handlePauseConfirm(opts)}
         />
       )}
     </div>

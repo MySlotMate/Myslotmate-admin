@@ -120,6 +120,51 @@ export function deleteEvent(eventId: string, hostId: string): Promise<unknown> {
   });
 }
 
+// One occurrence of a (possibly recurring) experience, for the pause picker.
+export interface EventOccurrence {
+  date: string;
+  remaining: number;
+  is_fully_booked: boolean;
+  is_paused: boolean;
+}
+
+// GET /events/{id}/occurrences?host_id= — every upcoming session, paused ones
+// flagged. Used to pick which session(s) to pause.
+export function fetchEventOccurrences(
+  eventId: string,
+  hostId: string,
+): Promise<EventOccurrence[]> {
+  return apiFetch<EventOccurrence[]>(
+    `/events/${eventId}/occurrences?host_id=${encodeURIComponent(hostId)}`,
+  );
+}
+
+// pauseEvent pauses an experience. Modes:
+//  - neither arg           → pause entirely (all future sessions)
+//  - pausedFrom=<RFC3339>  → pause that session and every one after it
+//  - pausedDate=<RFC3339>  → skip just that one occurrence (recurring only)
+// NOTE: the backend automatically cancels + refunds the affected bookings.
+export function pauseEvent(
+  eventId: string,
+  hostId: string,
+  pausedFrom?: string,
+  pausedDate?: string,
+): Promise<unknown> {
+  return apiFetch(`/events/${eventId}/pause`, {
+    method: 'POST',
+    body: { host_id: hostId, paused_from: pausedFrom, paused_date: pausedDate },
+  });
+}
+
+// resumeEvent clears every pause (full, from-session and single-session) and
+// puts the experience back live.
+export function resumeEvent(eventId: string, hostId: string): Promise<unknown> {
+  return apiFetch(`/events/${eventId}/resume`, {
+    method: 'POST',
+    body: { host_id: hostId },
+  });
+}
+
 // ── Uploads ──────────────────────────────────────────────────────────────────
 
 export interface UploadResult {
