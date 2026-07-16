@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Pagination } from '../../components/ui/Pagination';
+import { CreateHostModal } from './CreateHostModal';
 import type { Host, HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
 
@@ -27,6 +28,7 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState('');
+  const [creating, setCreating] = useState(false);
 
   // Effective search comes from the header global search or the local input.
   const effectiveSearch = (searchQuery || localSearch).trim();
@@ -106,7 +108,8 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
         </div>
         <div className="flex flex-wrap gap-3">
           <Button variant="secondary" onClick={() => alert('Downloading KYC batches...')}>Download KYC queue</Button>
-          <Button variant="primary" onClick={() => alert('Showing hosts flagged for quality review...')}>Review pending hosts</Button>
+          <Button variant="secondary" onClick={() => alert('Showing hosts flagged for quality review...')}>Review pending hosts</Button>
+          <Button variant="primary" onClick={() => setCreating(true)}>Create host</Button>
         </div>
       </div>
 
@@ -223,6 +226,11 @@ export const HostsDirectory: React.FC<HostsDirectoryProps> = ({ searchQuery }) =
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
       )}
 
+      <CreateHostModal
+        isOpen={creating}
+        onClose={() => setCreating(false)}
+        onCreated={() => void loadHosts()}
+      />
     </div>
   );
 };

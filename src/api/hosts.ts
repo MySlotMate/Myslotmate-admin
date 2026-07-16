@@ -5,6 +5,32 @@ import { apiFetch } from './client';
 import type { HostApplicationStatus } from '../types';
 import type { HostRecord } from './directory';
 
+// HostCreate mirrors the public "become a host" application body. The host is
+// always created for an existing user (hosts.user_id is a required unique FK),
+// and the backend reads their phone number off the user record — so there is no
+// phone field here, exactly as on the public form.
+export interface HostCreate {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  city: string;
+  experience_desc?: string;
+  moods?: string[];
+  description?: string;
+  preferred_days?: string[];
+  group_size?: number;
+  social_instagram?: string | null;
+  social_linkedin?: string | null;
+  social_website?: string | null;
+  is_professional?: boolean;
+}
+
+// createHost onboards an existing user as a host. The backend submits the
+// application and approves it in one request, so the host comes back live.
+export function createHost(body: HostCreate): Promise<HostRecord> {
+  return apiFetch<HostRecord>('/admin/hosts', { method: 'POST', body });
+}
+
 export function approveHost(hostId: string): Promise<unknown> {
   return apiFetch(`/admin/hosts/${hostId}/approve`, { method: 'POST' });
 }
