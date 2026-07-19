@@ -115,6 +115,12 @@ export interface HostProfileUpdate {
   is_super_host?: boolean;
   is_community_champ?: boolean;
   is_professional?: boolean;
+  // Stat overrides pin the numbers shown on the public host profile. Send a
+  // negative value to clear an override and go back to the derived number —
+  // omitting the key means "leave unchanged".
+  events_hosted_override?: number;
+  people_met_override?: number;
+  avg_rating_override?: number;
 }
 
 // updateHostProfile saves an admin edit of a host's profile and returns the

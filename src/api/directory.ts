@@ -92,6 +92,12 @@ export interface HostRecord {
   social_website?: string;
   avg_rating?: number;
   total_reviews?: number;
+  // Admin overrides for the three headline stats on the public host profile.
+  // Undefined/null means the value shown there stays derived (events hosted and
+  // people met from the host's events, rating from reviews).
+  events_hosted_override?: number | null;
+  people_met_override?: number | null;
+  avg_rating_override?: number | null;
   // Per-host commission override — the platform's cut of this host's
   // bookings (host keeps the remainder). null/undefined means the platform-
   // wide default split applies.

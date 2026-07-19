@@ -44,6 +44,17 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
   const [isSuperHost, setIsSuperHost] = useState(!!host.is_super_host);
   const [isCommunityChamp, setIsCommunityChamp] = useState(!!host.is_community_champ);
   const [isProfessional, setIsProfessional] = useState(!!host.is_professional);
+  // Stat overrides — '' means "no override", i.e. the public profile keeps
+  // showing the derived number.
+  const [eventsHostedOverride, setEventsHostedOverride] = useState(
+    host.events_hosted_override != null ? String(host.events_hosted_override) : '',
+  );
+  const [peopleMetOverride, setPeopleMetOverride] = useState(
+    host.people_met_override != null ? String(host.people_met_override) : '',
+  );
+  const [avgRatingOverride, setAvgRatingOverride] = useState(
+    host.avg_rating_override != null ? String(host.avg_rating_override) : '',
+  );
 
   const [avatarUrl, setAvatarUrl] = useState(host.avatar_url ?? '');
   const [cropFile, setCropFile] = useState<File | null>(null);
@@ -98,6 +109,37 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
       toast.error('Group size must be a whole number.');
       return;
     }
+
+    // Stat overrides: blank clears the override, which the API expresses as a
+    // negative value (omitting the key would mean "leave unchanged" instead).
+    const countOverride = (raw: string): number | 'invalid' => {
+      const t = raw.trim();
+      if (t === '') return -1;
+      const n = Number(t);
+      if (!Number.isInteger(n) || n < 0) return 'invalid';
+      return n;
+    };
+    const eventsOverride = countOverride(eventsHostedOverride);
+    if (eventsOverride === 'invalid') {
+      toast.error('Experiences hosted must be a whole number.');
+      return;
+    }
+    const peopleOverride = countOverride(peopleMetOverride);
+    if (peopleOverride === 'invalid') {
+      toast.error('People met must be a whole number.');
+      return;
+    }
+    const trimmedRating = avgRatingOverride.trim();
+    let ratingOverride = -1;
+    if (trimmedRating !== '') {
+      const n = Number(trimmedRating);
+      if (Number.isNaN(n) || n < 0 || n > 5) {
+        toast.error('Avg. rating must be between 0 and 5.');
+        return;
+      }
+      ratingOverride = n;
+    }
+
     const patch: HostProfileUpdate = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
@@ -120,6 +162,9 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
       is_super_host: isSuperHost,
       is_community_champ: isCommunityChamp,
       is_professional: isProfessional,
+      events_hosted_override: eventsOverride,
+      people_met_override: peopleOverride,
+      avg_rating_override: ratingOverride,
     };
     setSaving(true);
     try {
@@ -264,6 +309,21 @@ export const EditHostProfileModal: React.FC<Props> = ({ host, isOpen, onClose, o
             </div>
           </section>
 
+          {/* Profile stat overrides */}
+          <section>
+            <SectionTitle>Profile stats</SectionTitle>
+            <p className="mb-3 text-xs font-medium text-slate-500">
+              These are the three numbers on the host's public profile. Leave a field
+              blank to keep the automatic value — experiences hosted and people met are
+              counted from the host's events, and the rating is averaged from reviews.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <NumberField label="Experiences hosted" value={eventsHostedOverride} onChange={setEventsHostedOverride} disabled={busy} />
+              <NumberField label="People met" value={peopleMetOverride} onChange={setPeopleMetOverride} disabled={busy} />
+              <DecimalField label="Avg. rating (0–5)" value={avgRatingOverride} onChange={setAvgRatingOverride} disabled={busy} />
+            </div>
+          </section>
+
           {/* Actions */}
           <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
             <Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
@@ -305,6 +365,14 @@ const NumberField: React.FC<{ label: string; value: string; onChange: (v: string
   <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
     {label}
     <input type="number" min={0} step={1} className={inputClass} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+  </label>
+);
+
+// DecimalField is NumberField for values that aren't whole numbers (ratings).
+const DecimalField: React.FC<{ label: string; value: string; onChange: (v: string) => void; disabled?: boolean }> = ({ label, value, onChange, disabled }) => (
+  <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
+    {label}
+    <input type="number" min={0} max={5} step={0.1} className={inputClass} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
   </label>
 );
 
