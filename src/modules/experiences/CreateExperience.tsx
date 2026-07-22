@@ -1434,12 +1434,27 @@ export const CreateExperience: React.FC = () => {
       };
 
       if (isEdit && editEventId) {
-        // Edit: update in place, keep the event's existing publish status.
+        // Edit: update in place, then publish. The edit screen's only action is
+        // "Save changes", and a draft has no other way to go live from here.
+        // publishEvent is a no-op server-side for events that aren't drafts, so
+        // this promotes a draft to live without disturbing an already-live,
+        // paused, or cancelled event.
         await updateEvent(editEventId, payload);
+        let publishFailed = false;
+        try {
+          await publishEvent(editEventId, hostId);
+        } catch (publishErr) {
+          publishFailed = true;
+          console.warn('Publish failed:', publishErr);
+        }
         setCreatedEventId(editEventId);
-        setSavedAsDraft(false);
+        setSavedAsDraft(publishFailed);
         setShowSuccess(true);
-        toast.success('Experience updated successfully!');
+        if (publishFailed) {
+          toast.error('Saved, but publishing failed. The experience is still a draft — please try again.');
+        } else {
+          toast.success('Experience updated successfully!');
+        }
       } else {
         const created = await createEvent({
           ...payload,
