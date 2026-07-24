@@ -44,6 +44,7 @@ import {
   publishEvent,
   uploadFiles,
   listExperienceTemplates,
+  checkEventSlugAvailability,
 } from '../../api/events';
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
@@ -56,6 +57,7 @@ import type { Host } from '../../types';
 interface FormData {
   // Step 1 - Basics
   title: string;
+  slug: string; // public URL slug; editable in edit mode
   hookLine: string;
   mood: string;
   description: string;
@@ -1004,6 +1006,10 @@ export const CreateExperience: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [savedAsDraft, setSavedAsDraft] = useState(false);
   const [createdEventId, setCreatedEventId] = useState<string>('');
+  // Live duplicate check for the editable slug (edit mode only).
+  const [slugStatus, setSlugStatus] = useState<
+    'idle' | 'checking' | 'available' | 'taken' | 'invalid'
+  >('idle');
 
   const [showErrors, setShowErrors] = useState(false);
 
@@ -1016,6 +1022,7 @@ export const CreateExperience: React.FC = () => {
 
   const [form, setForm] = useState<FormData>({
     title: '',
+    slug: '',
     hookLine: '',
     mood: '',
     description: '',
@@ -1124,6 +1131,7 @@ export const CreateExperience: React.FC = () => {
         setForm((prev) => ({
           ...prev,
           title: ev.title ?? '',
+          slug: ev.slug ?? '',
           hookLine: ev.hook_line ?? '',
           mood: ev.mood ?? '',
           description: ev.description ?? '',
@@ -1177,6 +1185,32 @@ export const CreateExperience: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editEventId]);
+
+  // Debounced duplicate check for the editable slug. Only runs in edit mode;
+  // the endpoint excludes the current event, so keeping the original slug
+  // always reads as available.
+  useEffect(() => {
+    if (!isEdit || !editEventId) return;
+    const raw = form.slug.trim();
+    // All status updates run inside the debounce callback (never synchronously
+    // in the effect body) so a keystroke doesn't cascade an extra render.
+    const handle = setTimeout(() => {
+      void (async () => {
+        if (!raw) {
+          setSlugStatus('invalid');
+          return;
+        }
+        setSlugStatus('checking');
+        try {
+          const res = await checkEventSlugAvailability(raw, editEventId);
+          setSlugStatus(res.available ? 'available' : 'taken');
+        } catch {
+          setSlugStatus('idle');
+        }
+      })();
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [form.slug, isEdit, editEventId]);
 
   // Ticket-tier row helpers (dynamic pricing).
   const addPriceTier = () =>
@@ -1349,6 +1383,17 @@ export const CreateExperience: React.FC = () => {
       toast.error('Please select the host to create this experience for');
       return;
     }
+    // Guard the editable slug: never submit an empty or already-taken slug.
+    if (isEdit) {
+      if (!form.slug.trim()) {
+        toast.error('The URL slug cannot be empty');
+        return;
+      }
+      if (slugStatus === 'taken') {
+        toast.error('That URL slug is already in use — pick another');
+        return;
+      }
+    }
     setSubmitType(asDraft ? 'draft' : 'publish');
     setIsSubmitting(true);
 
@@ -1439,7 +1484,10 @@ export const CreateExperience: React.FC = () => {
         // publishEvent is a no-op server-side for events that aren't drafts, so
         // this promotes a draft to live without disturbing an already-live,
         // paused, or cancelled event.
-        await updateEvent(editEventId, payload);
+        await updateEvent(editEventId, {
+          ...payload,
+          slug: form.slug.trim() || undefined,
+        });
         let publishFailed = false;
         try {
           await publishEvent(editEventId, hostId);
@@ -1579,6 +1627,60 @@ export const CreateExperience: React.FC = () => {
               }}
               hasError={showErrors && !form.title.trim()}
             />
+
+            {/* URL slug — editable in edit mode, with a live duplicate check.
+                New experiences auto-generate a slug from the title server-side. */}
+            {isEdit && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  URL slug
+                </label>
+                <input
+                  type="text"
+                  value={form.slug}
+                  onChange={(e) =>
+                    updateForm(
+                      'slug',
+                      // Lenient while typing (keep a trailing hyphen so word
+                      // boundaries work); the server slugifies again on save.
+                      e.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+/, ''),
+                    )
+                  }
+                  placeholder="sunset-yoga-on-the-beach"
+                  className={`w-full rounded-lg border px-4 py-3 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
+                    slugStatus === 'taken' || slugStatus === 'invalid'
+                      ? 'border-red-500 bg-red-50'
+                      : 'border-gray-200 focus:border-transparent'
+                  }`}
+                />
+                <p className="text-xs text-gray-400">
+                  /experience/{form.slug || 'your-experience-slug'}
+                </p>
+                {slugStatus === 'checking' && (
+                  <p className="text-xs text-gray-400">Checking availability…</p>
+                )}
+                {slugStatus === 'available' && (
+                  <p className="text-xs text-green-600">This slug is available.</p>
+                )}
+                {slugStatus === 'taken' && (
+                  <p className="text-xs text-red-500">
+                    This slug is already in use — pick another.
+                  </p>
+                )}
+                {slugStatus === 'invalid' && (
+                  <p className="text-xs text-red-500">
+                    A slug is required.
+                  </p>
+                )}
+                <p className="text-xs text-amber-600">
+                  Changing this changes the experience&rsquo;s public URL. The old
+                  UUID link keeps working.
+                </p>
+              </div>
+            )}
 
             {/* Hook Line */}
             <div className="space-y-2">

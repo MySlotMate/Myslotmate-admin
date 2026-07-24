@@ -57,8 +57,12 @@ export function createEvent(body: EventCreatePayload): Promise<CreatedEvent> {
 }
 
 // EventUpdatePayload mirrors EventCreatePayload; the backend PUT accepts all
-// fields as optional and requires host_id in the body for ownership.
-export type EventUpdatePayload = Omit<EventCreatePayload, 'status'>;
+// fields as optional and requires host_id in the body for ownership. `slug`
+// lets an admin override the public URL slug (validated + de-duplicated
+// server-side; a collision returns 409).
+export type EventUpdatePayload = Omit<EventCreatePayload, 'status'> & {
+  slug?: string;
+};
 
 export function updateEvent(
   eventId: string,
@@ -67,9 +71,26 @@ export function updateEvent(
   return apiFetch(`/events/${eventId}`, { method: 'PUT', body });
 }
 
+// Live duplicate check for the slug editor. `exclude` is the event being
+// edited, so its own current slug does not count as taken.
+export interface SlugAvailability {
+  available: boolean;
+  slug: string;
+}
+
+export function checkEventSlugAvailability(
+  slug: string,
+  excludeEventId?: string,
+): Promise<SlugAvailability> {
+  const params = new URLSearchParams({ slug });
+  if (excludeEventId) params.set('exclude', excludeEventId);
+  return apiFetch<SlugAvailability>(`/events/slug-available?${params.toString()}`);
+}
+
 // Full event detail (GET /events/{id}) for prefilling the edit form.
 export interface EventDetail {
   id: string;
+  slug: string;
   host_id: string;
   title: string;
   hook_line: string | null;
