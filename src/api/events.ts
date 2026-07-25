@@ -194,7 +194,7 @@ export interface UploadResult {
   size: number;
 }
 
-export type UploadFolder = 'events/covers' | 'events/gallery' | 'general';
+export type UploadFolder = 'events/covers' | 'events/gallery' | 'attendees/id-proofs' | 'general';
 
 // POST /upload/?folder=<prefix> — multipart upload, returns hosted URLs.
 export function uploadFiles(files: File[], folder: UploadFolder = 'general'): Promise<UploadResult[]> {

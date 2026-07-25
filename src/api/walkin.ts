@@ -4,6 +4,7 @@
 // Free events confirm immediately on initiate (paid === false).
 
 import { apiFetch } from './client';
+import type { AttendeeDetailsPayload } from '../modules/experiences/OnSpotAttendeeFields';
 
 export interface WalkInInitiateBody {
   guest_name: string;
@@ -11,6 +12,8 @@ export interface WalkInInitiateBody {
   event_id: string;
   quantity: number;
   occurrence_date?: string; // RFC3339; required for recurring events
+  // Extra attendee-profile answers, for events that require attendee details.
+  attendee_details?: AttendeeDetailsPayload;
 }
 
 export interface WalkInInitiateResponse {

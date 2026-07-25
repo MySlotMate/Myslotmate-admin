@@ -5,9 +5,16 @@ import { Button } from '../../components/ui/Button';
 import { ApiError } from '../../api/client';
 import { initiateWalkIn, completeWalkIn, fetchEventOccurrences, lookupWalkInPhone } from '../../api/walkin';
 import type { EventOccurrence } from '../../api/walkin';
+import { fetchEventDetail } from '../../api/events';
 import { loadRazorpay, openRazorpayCheckout } from '../../lib/razorpay';
 import { downloadTicketPdf, sendTicketNotificationPdf } from '../../lib/ticket';
 import type { AdminEvent } from '../../api/directory';
+import {
+  OnSpotAttendeeFields,
+  attendeeFormValid,
+  buildAttendeePayload,
+  type AttendeeValues,
+} from './OnSpotAttendeeFields';
 
 // Formats an RFC3339 instant in IST for display in the dropdown.
 const istFormatter = new Intl.DateTimeFormat('en-IN', {
@@ -45,6 +52,13 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
   const [booking, setBooking] = useState<{ id: string; quantity?: number; amount_cents?: number; occurrence_date?: string } | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  // Attendee details — required for events configured with them. Loaded from the
+  // event detail when the modal opens.
+  const [attendeeFields, setAttendeeFields] = useState<string[]>([]);
+  const [attendeeValues, setAttendeeValues] = useState<AttendeeValues>({});
+  const [showAttendeeErrors, setShowAttendeeErrors] = useState(false);
+  const requiresAttendee = attendeeFields.length > 0;
+
   // Load the next 3 upcoming occurrences when the modal opens.
   useEffect(() => {
     if (!isOpen) return;
@@ -63,6 +77,20 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load available dates.');
       })
       .finally(() => { if (!cancelled) setOccLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, event.id]);
+
+  // Load which attendee-detail fields this event requires (if any) so we can
+  // collect them in the on-spot form, matching the customer booking flow.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetchEventDetail(event.id)
+      .then((detail) => {
+        if (cancelled) return;
+        setAttendeeFields(detail.requires_attendee_details ? detail.attendee_fields ?? [] : []);
+      })
+      .catch(() => { if (!cancelled) setAttendeeFields([]); });
     return () => { cancelled = true; };
   }, [isOpen, event.id]);
 
@@ -88,7 +116,11 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
     setOccurrences([]); setSelectedDate('');
     setLoading(false); setError(null); setDone(false);
     setBooking(null); setDownloading(false);
+    setAttendeeFields([]); setAttendeeValues({}); setShowAttendeeErrors(false);
   };
+
+  const setAttendeeValue = (key: string, value: string) =>
+    setAttendeeValues((prev) => ({ ...prev, [key]: value }));
 
   // Capacity gating for the chosen slot.
   const selectedOcc = occurrences.find((o) => o.date === selectedDate) ?? null;
@@ -143,6 +175,13 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
     if (selectedOcc?.is_fully_booked) { setError('This slot is fully booked. Pick another date.'); return; }
     if (notEnoughRoom) { setError(`Only ${selectedOcc?.remaining} spot(s) left for this slot. Reduce the quantity.`); return; }
 
+    // Attendee-details gate — collect the required extra details before booking.
+    if (requiresAttendee && !attendeeFormValid(attendeeFields, attendeeValues)) {
+      setShowAttendeeErrors(true);
+      setError('Please complete the attendee details.');
+      return;
+    }
+
     // The backend stores numbers with the country code; the field takes 10 digits.
     const fullPhone = `+91${phone}`;
 
@@ -155,6 +194,9 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
         event_id: event.id,
         quantity,
         occurrence_date,
+        ...(requiresAttendee && {
+          attendee_details: buildAttendeePayload(attendeeFields, attendeeValues),
+        }),
       });
 
       // Free event → already booked + confirmed.
@@ -312,6 +354,16 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
           <p className="text-xs text-slate-400">
             Showing the next {occurrences.length || 3} upcoming slot{occurrences.length === 1 ? '' : 's'} for this experience (times in IST).
           </p>
+
+          {requiresAttendee && (
+            <OnSpotAttendeeFields
+              fields={attendeeFields}
+              values={attendeeValues}
+              onChange={setAttendeeValue}
+              showErrors={showAttendeeErrors}
+              disabled={loading}
+            />
+          )}
 
           {!occLoading && slotBlocked && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">

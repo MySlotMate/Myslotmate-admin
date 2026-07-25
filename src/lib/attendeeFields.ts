@@ -1,16 +1,58 @@
-// Attendee-details field catalog for the admin "require attendee details"
-// checklist. Keys must match the backend attendee_profiles columns and the
-// customer app's src/lib/attendeeFields.ts.
-export const ATTENDEE_FIELDS: { key: string; label: string }[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'age', label: 'Age' },
-  { key: 'gender', label: 'Gender' },
-  { key: 'qualification', label: 'Highest Qualification' },
-  { key: 'occupation', label: 'Occupation' },
-  { key: 'marital_status', label: 'Marital Status' },
-  { key: 'contact_number', label: 'Contact Number' },
-  { key: 'whatsapp_number', label: 'WhatsApp Number' },
-  { key: 'registration_type', label: 'Registering Solo or Group' },
-  { key: 'govt_id_url', label: 'Govt. ID proof' },
-  { key: 'travel', label: 'Travel' },
+// Canonical attendee-details field catalog. Keys must match the backend
+// attendee_profiles columns and the customer app's src/lib/attendeeFields.ts.
+// Used by the admin "require attendee details" checklist AND the on-spot booking
+// form, which renders the fields an event requires.
+
+export type AttendeeFieldType = 'text' | 'number' | 'tel' | 'select' | 'bool' | 'file';
+
+export interface AttendeeFieldDef {
+  key: string;
+  label: string;
+  type: AttendeeFieldType;
+  options?: { value: string; label: string }[]; // for select
+}
+
+export const ATTENDEE_FIELDS: AttendeeFieldDef[] = [
+  { key: 'name', label: 'Name', type: 'text' },
+  { key: 'age', label: 'Age', type: 'number' },
+  {
+    key: 'gender',
+    label: 'Gender',
+    type: 'select',
+    options: [
+      { value: 'male', label: 'Male' },
+      { value: 'female', label: 'Female' },
+      { value: 'other', label: 'Other' },
+      { value: 'prefer_not', label: 'Prefer not to say' },
+    ],
+  },
+  { key: 'qualification', label: 'Highest Qualification', type: 'text' },
+  { key: 'occupation', label: 'Occupation', type: 'text' },
+  {
+    key: 'marital_status',
+    label: 'Marital Status',
+    type: 'select',
+    options: [
+      { value: 'single', label: 'Single' },
+      { value: 'married', label: 'Married' },
+      { value: 'other', label: 'Other' },
+    ],
+  },
+  { key: 'contact_number', label: 'Contact Number', type: 'tel' },
+  { key: 'whatsapp_number', label: 'WhatsApp Number', type: 'tel' },
+  {
+    key: 'registration_type',
+    label: 'Registering Solo or Group',
+    type: 'select',
+    options: [
+      { value: 'solo', label: 'Solo' },
+      { value: 'group', label: 'Group' },
+    ],
+  },
+  { key: 'govt_id_url', label: 'Govt. ID proof', type: 'file' },
+  { key: 'travel', label: 'Travel', type: 'bool' },
+  { key: 'social_link', label: 'Social Link (Facebook/Instagram)', type: 'text' },
 ];
+
+export const ATTENDEE_FIELD_BY_KEY: Record<string, AttendeeFieldDef> =
+  Object.fromEntries(ATTENDEE_FIELDS.map((f) => [f.key, f]));
