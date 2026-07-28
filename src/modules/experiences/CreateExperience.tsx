@@ -1291,11 +1291,30 @@ export const CreateExperience: React.FC = () => {
   };
 
   const removeGalleryImage = (index: number) => {
-    URL.revokeObjectURL(form.galleryPreviews[index]!);
-    updateForm(
-      'galleryImages',
-      form.galleryImages.filter((_, i) => i !== index)
-    );
+    // galleryPreviews is existingGalleryUrls (already-uploaded, order kept)
+    // followed by one blob preview per not-yet-uploaded galleryImages file. The
+    // preview index maps to one or the other depending on which half it lands in.
+    const existingCount = form.existingGalleryUrls.length;
+    const preview = form.galleryPreviews[index];
+    // Only blob: previews (freshly added files) own an object URL to revoke;
+    // existing https URLs must not be revoked.
+    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+
+    if (index < existingCount) {
+      // Removing an already-uploaded photo — drop it from existingGalleryUrls so
+      // it isn't re-added to gallery_urls on save (this was the deletion bug).
+      updateForm(
+        'existingGalleryUrls',
+        form.existingGalleryUrls.filter((_, i) => i !== index)
+      );
+    } else {
+      // Removing a newly added file — index into galleryImages past the existing ones.
+      const newIndex = index - existingCount;
+      updateForm(
+        'galleryImages',
+        form.galleryImages.filter((_, i) => i !== newIndex)
+      );
+    }
     updateForm(
       'galleryPreviews',
       form.galleryPreviews.filter((_, i) => i !== index)
@@ -1486,6 +1505,11 @@ export const CreateExperience: React.FC = () => {
         await updateEvent(editEventId, {
           ...payload,
           slug: form.slug.trim() || undefined,
+          // On edit, send explicit values so removals actually persist: the
+          // backend keeps the existing image(s) when these fields are omitted, so
+          // an empty gallery must be sent as [] and a removed cover as "".
+          gallery_urls: galleryUrls,
+          cover_image_url: coverImageUrl ?? '',
         });
         let publishFailed = false;
         try {
@@ -1711,9 +1735,12 @@ export const CreateExperience: React.FC = () => {
                   preview={form.coverImagePreview}
                   onUpload={handleCoverUpload}
                   onRemove={() => {
-                    if (form.coverImagePreview) URL.revokeObjectURL(form.coverImagePreview);
+                    if (form.coverImagePreview?.startsWith('blob:'))
+                      URL.revokeObjectURL(form.coverImagePreview);
                     updateForm('coverImage', null);
                     updateForm('coverImagePreview', null);
+                    // Clear the persisted URL too, otherwise save re-sends the old image.
+                    updateForm('existingCoverUrl', null);
                   }}
                 />
                 <ImageUpload
@@ -2211,10 +2238,6 @@ export const CreateExperience: React.FC = () => {
                         }`}
                       />
                     </div>
-                    <p className="text-xs text-gray-500">
-                      Platform fee: 30% • Host earns: ₹
-                      {((form.priceCents / 100) * 0.7).toFixed(0)} per booking
-                    </p>
                   </div>
                 )}
 
@@ -2281,7 +2304,7 @@ export const CreateExperience: React.FC = () => {
                       + Add ticket type
                     </button>
                     <p className="text-xs text-gray-500">
-                      Guests pick one ticket type when booking. Platform fee: 30%.
+                      Guests pick one ticket type when booking.
                     </p>
                   </div>
                 )}
