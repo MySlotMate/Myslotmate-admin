@@ -44,6 +44,12 @@ export interface EventCreatePayload {
   requires_attendee_details?: boolean;
   attendee_fields?: string[];
   terms_and_conditions?: string;
+  // Privacy & access. is_private lists the event with a lock; access_passkey is
+  // required at the Book step; passkey_grants_free makes that passkey also comp a
+  // paid booking to free.
+  is_private?: boolean;
+  access_passkey?: string | null;
+  passkey_grants_free?: boolean;
 }
 
 export interface CreatedEvent {
@@ -119,10 +125,17 @@ export interface EventDetail {
   requires_attendee_details: boolean;
   attendee_fields: string[] | null;
   terms_and_conditions: string | null;
+  is_private: boolean;
+  // Only returned when the owning host_id is supplied (see fetchEventDetail).
+  access_passkey: string | null;
+  passkey_grants_free: boolean;
 }
 
-export function fetchEventDetail(eventId: string): Promise<EventDetail> {
-  return apiFetch<EventDetail>(`/events/${eventId}`);
+// Pass the owning hostId so the backend includes the private-event passkey in
+// the response (it is stripped for anyone else). Needed to prefill the edit form.
+export function fetchEventDetail(eventId: string, hostId?: string): Promise<EventDetail> {
+  const qs = hostId ? `?host_id=${encodeURIComponent(hostId)}` : '';
+  return apiFetch<EventDetail>(`/events/${eventId}${qs}`);
 }
 
 export function publishEvent(eventId: string, hostId: string): Promise<CreatedEvent> {

@@ -17,19 +17,11 @@ import {
   FiX,
   FiCheck,
   FiMapPin,
-  FiClock,
-  FiUsers,
   FiCalendar,
   FiShare2,
   FiExternalLink,
-  FiStar,
-  FiChevronDown,
-  FiUser,
-  FiMessageCircle,
-  FiShield,
   FiSearch,
 } from 'react-icons/fi';
-import { LuBadgeCheck, LuSparkles, LuTicket } from 'react-icons/lu';
 import { RichTextEditor } from '../../components/RichTextEditor';
 import { ImageCropModal } from '../../components/ImageCropModal';
 import { LocationSearchInput } from '../../components/LocationSearchInput';
@@ -48,6 +40,7 @@ import {
 } from '../../api/events';
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
+import CouponsManager from './CouponsManager';
 import { fetchHosts } from '../../api/directory';
 import type { Host } from '../../types';
 
@@ -92,6 +85,10 @@ interface FormData {
   // Attendee details
   requiresAttendeeDetails: boolean;
   attendeeFields: string[];
+  // Privacy & access
+  isPrivate: boolean;
+  accessPasskey: string;
+  passkeyGrantsFree: boolean;
 }
 
 const MOODS = [
@@ -713,212 +710,6 @@ function TitleAutocomplete({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Preview Card Component                                             */
-/* ------------------------------------------------------------------ */
-function PreviewCard({ form }: { form: FormData }) {
-  const cancellationCopy =
-    form.cancellationPolicy === 'flexible'
-      ? 'Free cancellation up to 24 hours before the experience.'
-      : form.cancellationPolicy === 'moderate'
-        ? 'Free cancellation up to 5 days before the experience.'
-        : form.cancellationPolicy === 'strict'
-          ? '50% refund up to 1 week before the experience.'
-          : form.cancellationPolicy === 'no_refund'
-            ? 'This experience is non-refundable once booked.'
-            : 'Standard cancellation policy applies.';
-
-  const cancellationBadge =
-    form.cancellationPolicy === 'flexible'
-      ? { label: 'Flexible', sub: 'cancellation' }
-      : form.cancellationPolicy === 'moderate'
-        ? { label: 'Moderate', sub: 'cancellation' }
-        : form.cancellationPolicy === 'strict'
-          ? { label: 'Strict', sub: 'cancellation' }
-          : form.cancellationPolicy === 'no_refund'
-            ? { label: 'No refunds', sub: 'policy' }
-            : { label: 'Standard', sub: 'policy' };
-
-  const getFormattedDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    const year = parseInt(parts[0]!, 10);
-    const month = parseInt(parts[1]!, 10) - 1;
-    const day = parseInt(parts[2]!, 10);
-    const dateObj = new Date(year, month, day);
-    // "eee d" — e.g. "Mon 7"
-    const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-    return `${weekday} ${dateObj.getDate()}`;
-  };
-
-  const getFormattedTime = (timeStr: string) => {
-    if (!timeStr) return '';
-    const parts = timeStr.split(':');
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0]!, 10);
-    const minutes = parseInt(parts[1]!, 10);
-    const dateObj = new Date(2000, 0, 1, hours, minutes);
-    // "h:mm a" — e.g. "9:30 AM"
-    return dateObj.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  };
-
-  return (
-    <div className="sticky top-20 h-max w-full pl-4 max-w-[420px] mx-auto lg:ml-auto select-none">
-      <div className="relative overflow-hidden rounded-3xl border border-[#cfe8fa] bg-gradient-to-br from-white via-[#f4faff] to-[#e9f5ff] p-5 shadow-[0_24px_60px_rgba(58,119,172,0.12)]">
-        {/* Header */}
-        <div className="mb-3 flex items-start gap-2.5">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-[#cfe8fa] bg-white shadow-[0_8px_20px_rgba(31,167,255,0.18)]">
-            <LuTicket className="h-4 w-4 -rotate-12 text-[#0094CA]" />
-          </div>
-          <div className="flex-1">
-            <h2 className="font-display text-xl font-extrabold leading-none tracking-tight text-[#16304c]">
-              {form.isFree ? (
-                'FREE EXPERIENCE'
-              ) : (
-                <>
-                  ₹{((form.priceCents ?? 0) / 100).toFixed(0)}
-                  <span className="text-sm font-medium text-[#6f8daa]">/person</span>
-                </>
-              )}
-            </h2>
-            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[#5f7e9a]">
-              Hosted by verified host
-              <LuBadgeCheck className="h-3.5 w-3.5 text-[#0094CA]" fill="#0094CA" stroke="#ffffff" />
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div className="mb-3 flex items-center justify-start gap-4 border-b border-[#dbeaf5] pb-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-[#0094CA] uppercase">NEW</span>
-          </div>
-          <div className="h-4 w-px bg-[#dbeaf5]" />
-          <div className="flex items-center gap-2">
-            <FiUsers className="h-4 w-4 text-[#0094CA]" />
-            <span className="font-bold text-[#16304c]">0</span>
-            <span className="text-[#6f8daa]">people joined</span>
-          </div>
-        </div>
-
-        {/* Choose Your Session */}
-        <div className="mb-3">
-          <div className="flex items-center gap-1.5">
-            <FiCalendar className="h-4 w-4 text-[#0094CA]" />
-            <h3 className="text-sm font-bold text-[#16304c]">Choose your session</h3>
-          </div>
-          <p className="mb-4 ml-[22px] text-[11px] leading-tight text-[#6f8daa]">Pick a time</p>
-
-          {form.eventDate ? (
-            <div className="flex w-full items-center gap-2.5 rounded-2xl border-2 border-transparent bg-gradient-to-br from-[#1fa7ff] to-[#0094CA] px-3.5 py-2.5 text-left text-white shadow-[0_14px_30px_rgba(31,167,255,0.35)]">
-              <FiClock className="h-4 w-4 flex-shrink-0 text-white/90" />
-              <div className="flex flex-1 items-baseline gap-2">
-                <span className="text-sm font-bold">{getFormattedDate(form.eventDate)},</span>
-                <span className="text-sm text-white/90">
-                  {form.eventTime ? getFormattedTime(form.eventTime) : 'Time TBD'}
-                </span>
-              </div>
-              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white">
-                <FiCheck className="h-3 w-3 stroke-[3] text-[#0094CA]" />
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-[#dbeaf5] bg-white px-4 py-3 text-sm text-[#6f8daa] italic">
-              No upcoming sessions
-            </div>
-          )}
-        </div>
-
-        {/* Guests */}
-        <div className="mb-3">
-          <div className="flex items-center gap-1.5">
-            <FiUser className="h-4 w-4 text-[#0094CA]" />
-            <h3 className="text-sm font-bold text-[#16304c]">Guests</h3>
-          </div>
-          <p className="mb-2 ml-[22px] text-[11px] leading-tight text-[#6f8daa]">
-            How many are joining?
-          </p>
-          <div className="relative">
-            <div className="w-full rounded-2xl border border-[#dbeaf5] bg-white px-3.5 py-2.5 pr-10 text-sm font-medium text-[#16304c] outline-none flex justify-between items-center">
-              <span>1 Guest</span>
-              <FiChevronDown className="h-4 w-4 text-[#6f8daa]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Reserve Button Mock */}
-        <button
-          type="button"
-          disabled
-          className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#1fa7ff] to-[#0094CA] py-2.5 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(31,167,255,0.32)] opacity-50 cursor-not-allowed"
-        >
-          <span>Reserve My Spot</span>
-          <FiArrowRight className="h-4 w-4" />
-        </button>
-
-        {/* Trust Badges */}
-        <div className="mt-3 grid grid-cols-3 gap-1 border-t border-[#dbeaf5] pt-3">
-          <div className="flex flex-col items-center gap-1 px-1 text-center">
-            <FiShield className="h-4 w-4 text-[#0094CA]" />
-            <span className="text-[10px] leading-tight font-semibold text-[#16304c]">
-              {cancellationBadge.label}
-              <br />
-              {cancellationBadge.sub}
-            </span>
-          </div>
-          <div className="flex flex-col items-center gap-1 border-x border-[#dbeaf5] px-1 text-center">
-            <FiStar className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-            <span className="text-[10px] leading-tight font-semibold text-[#16304c]">
-              Verified
-              <br />
-              host
-            </span>
-          </div>
-          <div className="flex flex-col items-center gap-1 px-1 text-center">
-            <FiMessageCircle className="h-4 w-4 text-[#0094CA]" />
-            <span className="text-[10px] leading-tight font-semibold text-[#16304c]">
-              Instant
-              <br />
-              confirmation
-            </span>
-          </div>
-        </div>
-
-        {/* Footer Note */}
-        <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-[#5f7e9a]">
-          <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5 flex-shrink-0 text-[#5fc781]">
-            <path
-              fill="currentColor"
-              d="M17 3c-4 0-9 3-11 9-1.4 4.2.4 7.4 3 9 2-5 5.5-8 10-9-3 2-5 5-6 9 5 0 9-4 9-9V3h-5Z"
-            />
-          </svg>
-          <span>{cancellationCopy}</span>
-        </div>
-
-        {/* Rare find banner */}
-        {form.maxGroupSize <= 3 && (
-          <div className="mt-4 flex items-start gap-2 rounded-2xl border border-red-100 bg-red-50 p-3">
-            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-red-500">
-              <LuSparkles className="text-white" size={12} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-red-600">Rare find</p>
-              <p className="text-xs text-red-500">
-                Only {form.maxGroupSize} spot{form.maxGroupSize > 1 ? 's' : ''} left!
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Success Modal Component                                            */
 /* ------------------------------------------------------------------ */
 function SuccessModal({
@@ -1053,6 +844,9 @@ export const CreateExperience: React.FC = () => {
     termsAndConditions: '',
     requiresAttendeeDetails: false,
     attendeeFields: [],
+    isPrivate: false,
+    accessPasskey: '',
+    passkeyGrantsFree: false,
   });
 
   // Local string trackers for controlled numeric inputs to avoid leading-zero/clearing issues
@@ -1124,6 +918,18 @@ export const CreateExperience: React.FC = () => {
       try {
         const ev = await fetchEventDetail(editEventId);
         if (cancelled) return;
+        // The passkey is stripped unless the owning host_id is supplied, so for a
+        // private event refetch with the owner id to prefill it for re-sharing.
+        let accessPasskey = ev.access_passkey ?? '';
+        if (ev.is_private && !ev.access_passkey && ev.host_id) {
+          try {
+            const withKey = await fetchEventDetail(editEventId, ev.host_id);
+            if (cancelled) return;
+            accessPasskey = withKey.access_passkey ?? '';
+          } catch {
+            // Non-fatal: leave blank; host can set a new passkey.
+          }
+        }
         const dt = utcToISTInputs(ev.time);
         const endDt = ev.end_time ? utcToISTInputs(ev.end_time) : null;
         const hasTiers = (ev.price_tiers?.length ?? 0) > 0;
@@ -1165,6 +971,9 @@ export const CreateExperience: React.FC = () => {
           termsAndConditions: ev.terms_and_conditions ?? '',
           requiresAttendeeDetails: ev.requires_attendee_details,
           attendeeFields: ev.attendee_fields ?? [],
+          isPrivate: ev.is_private,
+          accessPasskey,
+          passkeyGrantsFree: ev.passkey_grants_free,
         }));
         setPriceInputStr(
           ev.is_free ? '' : ((ev.price_cents ?? 0) / 100).toString(),
@@ -1379,6 +1188,11 @@ export const CreateExperience: React.FC = () => {
       toast.error('Add at least one ticket type with a name and price');
       return false;
     }
+    if (form.isPrivate && !form.accessPasskey.trim()) {
+      setShowErrors(true);
+      toast.error('A private experience needs a passkey');
+      return false;
+    }
     return true;
   };
 
@@ -1494,6 +1308,12 @@ export const CreateExperience: React.FC = () => {
         terms_and_conditions: form.termsAndConditions.trim() || undefined,
         requires_attendee_details: form.requiresAttendeeDetails,
         attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
+        is_private: form.isPrivate,
+        // Send the passkey only for a private event; a paid private event may also
+        // comp the passkey holder. A public event clears both server-side.
+        access_passkey: form.isPrivate ? form.accessPasskey.trim() : '',
+        passkey_grants_free:
+          form.isPrivate && !form.isFree ? form.passkeyGrantsFree : false,
       };
 
       if (isEdit && editEventId) {
@@ -2122,13 +1942,11 @@ export const CreateExperience: React.FC = () => {
 
         {/* Step 2: Schedule & Pricing */}
         {currentStep === 2 && (
-          <div className="grid gap-6 lg:grid-cols-12">
-            {/* Form Section */}
-            <div className="max-h-[calc(100vh-200px)] space-y-6 overflow-y-auto rounded-xl border border-gray-200 bg-white p-6 shadow-sm [scrollbar-width:none] lg:col-span-7 [&::-webkit-scrollbar]:hidden">
-              <div className="border-b border-gray-100 pb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Schedule & Pricing</h2>
-                <p className="text-sm text-gray-500">Set when and how much</p>
-              </div>
+          <div className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="border-b border-gray-100 pb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Schedule & Pricing</h2>
+              <p className="text-sm text-gray-500">Set when and how much</p>
+            </div>
 
               {/* Pricing Section */}
               <div className="space-y-4">
@@ -2535,6 +2353,101 @@ export const CreateExperience: React.FC = () => {
                 )}
               </div>
 
+              {/* Privacy & Access */}
+              <div className="space-y-4 border-t border-gray-100 pt-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">
+                      Private experience
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Still shown in discovery with a lock — guests need a passkey
+                      to book. Share the passkey with your invited guests.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.isPrivate}
+                    onClick={() => updateForm('isPrivate', !form.isPrivate)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                      form.isPrivate ? 'bg-[#0094CA]' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                        form.isPrivate ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {form.isPrivate && (
+                  <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                        Passkey
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={form.accessPasskey}
+                          onChange={(e) =>
+                            updateForm('accessPasskey', e.target.value)
+                          }
+                          placeholder="e.g. SUMMER24"
+                          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0094CA] focus:outline-none focus:ring-1 focus:ring-[#0094CA]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateForm(
+                              'accessPasskey',
+                              Math.random().toString(36).slice(2, 8).toUpperCase(),
+                            )
+                          }
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Generate
+                        </button>
+                      </div>
+                      {showErrors && form.isPrivate && !form.accessPasskey.trim() && (
+                        <p className="mt-1 text-xs text-red-500">
+                          A private experience needs a passkey.
+                        </p>
+                      )}
+                    </div>
+
+                    {!form.isFree && (
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={form.passkeyGrantsFree}
+                          onChange={(e) =>
+                            updateForm('passkeyGrantsFree', e.target.checked)
+                          }
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-[#0094CA] focus:ring-[#0094CA]"
+                        />
+                        <span className="text-sm text-gray-700">
+                          <span className="font-medium">
+                            Passkey also lets guests book free
+                          </span>
+                          <br />
+                          <span className="text-gray-500">
+                            Guests who enter this passkey pay ₹0 — you comp the ticket.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Coupons — only for a saved event (needs an id + owning host). */}
+              {isEdit && editEventId && selectedHost?.id && (
+                <CouponsManager eventId={editEventId} hostId={selectedHost.id} />
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 border-t border-gray-100 pt-6">
                 <button
@@ -2581,18 +2494,6 @@ export const CreateExperience: React.FC = () => {
                   )}
                 </button>
               </div>
-            </div>
-
-            {/* Preview Card Sidebar */}
-            <div className="lg:col-span-5">
-              <div className="sticky top-24">
-                <h3 className="mb-4 text-sm font-semibold text-gray-500 uppercase">Preview</h3>
-                <PreviewCard form={form} />
-                <p className="mt-4 text-center text-xs text-gray-400">
-                  This is how the experience will appear to guests
-                </p>
-              </div>
-            </div>
           </div>
         )}
       </div>
