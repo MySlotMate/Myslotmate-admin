@@ -10,6 +10,8 @@ export interface Coupon {
   host_id: string;
   event_id: string | null;
   code: string;
+  // true = free-booking code (comp); false = access code (unlocks, guest pays).
+  grants_free: boolean;
   max_redemptions: number | null;
   times_redeemed: number;
   per_user_limit: number | null;
@@ -24,6 +26,8 @@ export interface CouponPayload {
   host_id: string;
   event_id?: string | null;
   code: string;
+  // true = free-booking code (comp); false = access code. Defaults to true.
+  grants_free?: boolean;
   max_redemptions?: number | null;
   per_user_limit?: number | null;
   valid_from?: string | null;
@@ -37,6 +41,24 @@ export function listHostCoupons(hostId: string): Promise<Coupon[]> {
 
 export function createCoupon(body: CouponPayload): Promise<Coupon> {
   return apiFetch<Coupon>('/coupons/', { method: 'POST', body });
+}
+
+export interface CouponBatchPayload {
+  host_id: string;
+  event_id?: string | null;
+  count: number;
+  prefix?: string;
+  // true = free-booking codes (comp); false = access codes. Defaults to true.
+  grants_free?: boolean;
+  // Defaults to single-use (max_redemptions=1, per_user_limit=1).
+  max_redemptions?: number | null;
+  per_user_limit?: number | null;
+  valid_until?: string | null;
+}
+
+// POST /coupons/batch — generate `count` unique single-use codes at once.
+export function createCouponsBatch(body: CouponBatchPayload): Promise<Coupon[]> {
+  return apiFetch<Coupon[]>('/coupons/batch', { method: 'POST', body });
 }
 
 export function updateCoupon(couponId: string, body: CouponPayload): Promise<Coupon> {

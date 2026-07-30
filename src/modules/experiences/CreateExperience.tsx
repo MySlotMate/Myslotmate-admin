@@ -87,6 +87,7 @@ interface FormData {
   attendeeFields: string[];
   // Privacy & access
   isPrivate: boolean;
+  accessMode: 'shared' | 'unique';
   accessPasskey: string;
   passkeyGrantsFree: boolean;
 }
@@ -845,6 +846,7 @@ export const CreateExperience: React.FC = () => {
     requiresAttendeeDetails: false,
     attendeeFields: [],
     isPrivate: false,
+    accessMode: 'shared',
     accessPasskey: '',
     passkeyGrantsFree: false,
   });
@@ -972,6 +974,7 @@ export const CreateExperience: React.FC = () => {
           requiresAttendeeDetails: ev.requires_attendee_details,
           attendeeFields: ev.attendee_fields ?? [],
           isPrivate: ev.is_private,
+          accessMode: accessPasskey ? 'shared' : ev.is_private ? 'unique' : 'shared',
           accessPasskey,
           passkeyGrantsFree: ev.passkey_grants_free,
         }));
@@ -1188,7 +1191,11 @@ export const CreateExperience: React.FC = () => {
       toast.error('Add at least one ticket type with a name and price');
       return false;
     }
-    if (form.isPrivate && !form.accessPasskey.trim()) {
+    if (
+      form.isPrivate &&
+      form.accessMode === 'shared' &&
+      !form.accessPasskey.trim()
+    ) {
       setShowErrors(true);
       toast.error('A private experience needs a passkey');
       return false;
@@ -1309,11 +1316,12 @@ export const CreateExperience: React.FC = () => {
         requires_attendee_details: form.requiresAttendeeDetails,
         attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
         is_private: form.isPrivate,
-        // Send the passkey only for a private event; a paid private event may also
-        // comp the passkey holder. A public event clears both server-side.
-        access_passkey: form.isPrivate ? form.accessPasskey.trim() : '',
-        passkey_grants_free:
-          form.isPrivate && !form.isFree ? form.passkeyGrantsFree : false,
+        // Shared mode sends the one passkey; unique mode clears it (access comes
+        // from the per-guest access codes). A public event clears it server-side.
+        access_passkey:
+          form.isPrivate && form.accessMode === 'shared'
+            ? form.accessPasskey.trim()
+            : '',
       };
 
       if (isEdit && editEventId) {
@@ -2384,68 +2392,112 @@ export const CreateExperience: React.FC = () => {
 
                 {form.isPrivate && (
                   <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                        Passkey
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={form.accessPasskey}
-                          onChange={(e) =>
-                            updateForm('accessPasskey', e.target.value)
-                          }
-                          placeholder="e.g. SUMMER24"
-                          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0094CA] focus:outline-none focus:ring-1 focus:ring-[#0094CA]"
-                        />
+                    {/* Access mode: one shared passkey vs a unique code per guest */}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          {
+                            key: 'shared' as const,
+                            title: 'Same passkey for everyone',
+                            desc: 'One passkey you share with all invited guests.',
+                          },
+                          {
+                            key: 'unique' as const,
+                            title: 'A unique code per guest',
+                            desc: 'Generate single-use codes; each books free.',
+                          },
+                        ]
+                      ).map((opt) => (
                         <button
+                          key={opt.key}
                           type="button"
-                          onClick={() =>
-                            updateForm(
-                              'accessPasskey',
-                              Math.random().toString(36).slice(2, 8).toUpperCase(),
-                            )
-                          }
-                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                          onClick={() => updateForm('accessMode', opt.key)}
+                          className={`rounded-lg border p-3 text-left transition ${
+                            form.accessMode === opt.key
+                              ? 'border-[#0094CA] bg-[#0094CA]/5 ring-1 ring-[#0094CA]'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
                         >
-                          Generate
+                          <span className="block text-sm font-medium text-gray-800">
+                            {opt.title}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-gray-500">
+                            {opt.desc}
+                          </span>
                         </button>
-                      </div>
-                      {showErrors && form.isPrivate && !form.accessPasskey.trim() && (
-                        <p className="mt-1 text-xs text-red-500">
-                          A private experience needs a passkey.
-                        </p>
-                      )}
+                      ))}
                     </div>
 
-                    {!form.isFree && (
-                      <label className="flex cursor-pointer items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={form.passkeyGrantsFree}
-                          onChange={(e) =>
-                            updateForm('passkeyGrantsFree', e.target.checked)
-                          }
-                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-[#0094CA] focus:ring-[#0094CA]"
-                        />
-                        <span className="text-sm text-gray-700">
-                          <span className="font-medium">
-                            Passkey also lets guests book free
+                    {form.accessMode === 'shared' ? (
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                          Passkey
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={form.accessPasskey}
+                            onChange={(e) =>
+                              updateForm('accessPasskey', e.target.value)
+                            }
+                            placeholder="e.g. SUMMER24"
+                            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0094CA] focus:outline-none focus:ring-1 focus:ring-[#0094CA]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateForm(
+                                'accessPasskey',
+                                Math.random()
+                                  .toString(36)
+                                  .slice(2, 8)
+                                  .toUpperCase(),
+                              )
+                            }
+                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            Generate
+                          </button>
+                        </div>
+                        {showErrors && !form.accessPasskey.trim() && (
+                          <p className="mt-1 text-xs text-red-500">
+                            A private experience needs a passkey.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        Each guest gets their own single-use code that unlocks
+                        booking.{' '}
+                        {isEdit ? (
+                          <span>Generate the codes in the Codes section below.</span>
+                        ) : (
+                          <span className="text-gray-400">
+                            Save the experience first, then generate the codes in
+                            the Codes section.
                           </span>
-                          <br />
-                          <span className="text-gray-500">
-                            Guests who enter this passkey pay ₹0 — you comp the ticket.
-                          </span>
-                        </span>
-                      </label>
+                        )}
+                      </p>
                     )}
+
                   </div>
                 )}
               </div>
 
               {/* Coupons — only for a saved event (needs an id + owning host). */}
-              {isEdit && editEventId && selectedHost?.id && (
-                <CouponsManager eventId={editEventId} hostId={selectedHost.id} />
+              {isEdit && editEventId && selectedHost?.id && form.isPrivate && (
+                <CouponsManager
+                  eventId={editEventId}
+                  hostId={selectedHost.id}
+                  kind="access"
+                />
+              )}
+              {isEdit && editEventId && selectedHost?.id && !form.isFree && (
+                <CouponsManager
+                  eventId={editEventId}
+                  hostId={selectedHost.id}
+                  kind="free"
+                />
               )}
 
               {/* Action Buttons */}
