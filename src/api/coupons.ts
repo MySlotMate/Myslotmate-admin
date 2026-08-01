@@ -70,3 +70,16 @@ export function deleteCoupon(couponId: string, hostId: string): Promise<unknown>
     method: 'DELETE',
   });
 }
+
+// POST /coupons/validate — verify a code without a specific guest (on-spot).
+// comps_booking indicates a free-booking code; per-guest limit is re-checked at
+// booking time.
+export function verifyCoupon(
+  eventId: string,
+  code: string,
+): Promise<{ valid: boolean; comps_booking: boolean; code: string }> {
+  return apiFetch('/coupons/validate', {
+    method: 'POST',
+    body: { event_id: eventId, code },
+  });
+}

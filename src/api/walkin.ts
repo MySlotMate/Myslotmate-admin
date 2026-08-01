@@ -14,6 +14,8 @@ export interface WalkInInitiateBody {
   occurrence_date?: string; // RFC3339; required for recurring events
   // Extra attendee-profile answers, for events that require attendee details.
   attendee_details?: AttendeeDetailsPayload;
+  // A valid free-booking code comps the walk-in to ₹0 (skips payment).
+  coupon_code?: string;
 }
 
 export interface WalkInInitiateResponse {

@@ -4,6 +4,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { ApiError } from '../../api/client';
 import { initiateWalkIn, completeWalkIn, fetchEventOccurrences, lookupWalkInPhone } from '../../api/walkin';
+import { verifyCoupon } from '../../api/coupons';
 import type { EventOccurrence } from '../../api/walkin';
 import { fetchEventDetail } from '../../api/events';
 import { loadRazorpay, openRazorpayCheckout } from '../../lib/razorpay';
@@ -43,6 +44,10 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
   const [phone, setPhone] = useState('');
   const [existingUser, setExistingUser] = useState(false); // phone already linked → name auto-filled & locked
   const [quantity, setQuantity] = useState(1);
+  const [couponCode, setCouponCode] = useState('');
+  const [verifiedCoupon, setVerifiedCoupon] = useState<string | null>(null);
+  const [verifyingCoupon, setVerifyingCoupon] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
   const [occurrences, setOccurrences] = useState<EventOccurrence[]>([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [occLoading, setOccLoading] = useState(false);
@@ -163,11 +168,35 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
     }
   };
 
+  const handleVerifyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) return;
+    setVerifyingCoupon(true);
+    setCouponError(null);
+    try {
+      const res = await verifyCoupon(event.id, code);
+      if (res.valid && res.comps_booking) {
+        setVerifiedCoupon(res.code);
+      } else if (res.valid) {
+        setCouponError('That code only grants access, not a free booking.');
+      } else {
+        setCouponError('Invalid coupon.');
+      }
+    } catch (err) {
+      setCouponError(
+        err instanceof Error ? err.message : 'Could not verify coupon.',
+      );
+    } finally {
+      setVerifyingCoupon(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!name.trim()) { setError('Guest name is required.'); return; }
+    if (couponCode.trim() && !verifiedCoupon) { setError('Verify the coupon before booking, or clear it.'); return; }
     if (phone.length !== 10) { setError('Enter a valid 10-digit phone number.'); return; }
     if (quantity < 1) { setError('Quantity must be at least 1.'); return; }
     if (!selectedDate) { setError('Please select a date for the booking.'); return; }
@@ -194,6 +223,7 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
         event_id: event.id,
         quantity,
         occurrence_date,
+        coupon_code: verifiedCoupon || undefined,
         ...(requiresAttendee && {
           attendee_details: buildAttendeePayload(attendeeFields, attendeeValues),
         }),
@@ -281,6 +311,13 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
             <span className="mx-2 text-slate-300">•</span>
             {event.isFree ? (
               <span className="font-semibold text-emerald-600">Free</span>
+            ) : verifiedCoupon ? (
+              <span className="font-semibold text-emerald-600">
+                Free with coupon{' '}
+                <span className="font-normal text-slate-400 line-through">
+                  ₹{event.price.toLocaleString()}
+                </span>
+              </span>
             ) : (
               <span className="inline-flex items-center gap-0.5 font-semibold text-ink">
                 <IndianRupee className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -288,6 +325,64 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
               </span>
             )}
           </div>
+
+          {/* Coupon — a verified free-booking code comps this walk-in to ₹0. */}
+          {!event.isFree && (
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                Coupon (optional)
+              </label>
+              {verifiedCoupon ? (
+                <div className="flex items-center justify-between rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                  <span className="text-sm font-medium text-emerald-700">
+                    ✓ {verifiedCoupon} — this booking is free
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerifiedCoupon(null);
+                      setCouponCode('');
+                      setCouponError(null);
+                    }}
+                    className="text-sm font-medium text-slate-500 hover:text-slate-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value.toUpperCase());
+                      setCouponError(null);
+                    }}
+                    placeholder="Free-booking code"
+                    disabled={loading || verifyingCoupon}
+                    className="w-full flex-1 rounded-2xl border border-brand-100 bg-white px-3 py-3 text-sm uppercase outline-none transition focus:border-brand-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleVerifyCoupon()}
+                    disabled={verifyingCoupon || !couponCode.trim()}
+                    className="shrink-0 rounded-2xl border border-brand-400 px-4 py-3 text-sm font-semibold text-brand-500 transition hover:bg-brand-50 disabled:opacity-50"
+                  >
+                    {verifyingCoupon ? '…' : 'Verify'}
+                  </button>
+                </div>
+              )}
+              {couponError ? (
+                <p className="mt-1 text-[11px] text-red-500">{couponError}</p>
+              ) : (
+                !verifiedCoupon && (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Enter a free-booking code and verify to comp this guest.
+                  </p>
+                )
+              )}
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Phone number</label>
@@ -386,7 +481,11 @@ export const OnSpotBookingModal: React.FC<OnSpotBookingModalProps> = ({ event, i
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={handleClose} disabled={loading}>Cancel</Button>
             <Button type="submit" variant="primary" disabled={loading || occLoading || slotBlocked}>
-              {loading ? 'Processing…' : event.isFree ? 'Create booking' : 'Collect payment'}
+              {loading
+                ? 'Processing…'
+                : event.isFree || verifiedCoupon
+                  ? 'Create booking'
+                  : 'Collect payment'}
             </Button>
           </div>
         </form>
