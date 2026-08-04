@@ -1,16 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
 import { Pagination } from '../../components/ui/Pagination';
+import { toast } from '../../lib/toast';
 import {
   fetchPayments,
   fetchLedger,
   fetchBalances,
   fetchPaymentsSummary,
+  reconcilePayouts,
   sourceRefund,
   type PaymentRow,
   type LedgerRow,
@@ -611,6 +613,22 @@ const TABS = [
 export const PaymentsDirectory: React.FC = () => {
   const [view, setView] = useState<(typeof TABS)[number]['key']>('activity');
   const [summaryKey, setSummaryKey] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncPayouts = async () => {
+    setSyncing(true);
+    try {
+      const r = await reconcilePayouts();
+      const msg = `Synced ${r.checked} payout${r.checked === 1 ? '' : 's'} — ${r.finalized} finalized, ${r.skipped} still processing${r.errors ? `, ${r.errors} error${r.errors === 1 ? '' : 's'}` : ''}.`;
+      if (r.errors > 0) toast.error(msg);
+      else toast.success(r.checked === 0 ? 'No payouts were pending sync.' : msg);
+      if (r.finalized > 0) setSummaryKey((k) => k + 1);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Payout sync failed.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -623,6 +641,10 @@ export const PaymentsDirectory: React.FC = () => {
             Every payment, ledger entry, and wallet balance in one place.
           </h3>
         </div>
+        <Button variant="secondary" disabled={syncing} onClick={() => void handleSyncPayouts()}>
+          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Syncing…' : 'Sync payout status'}
+        </Button>
       </div>
 
       <SummaryCards reloadKey={summaryKey} />

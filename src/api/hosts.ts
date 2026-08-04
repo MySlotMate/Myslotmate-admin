@@ -81,6 +81,23 @@ export interface PlatformFeeConfig {
   platform_percentage: number;
 }
 
+// HostEarnings mirrors the backend EarningsSummary — the same money breakdown the
+// host sees on their own dashboard. All amounts are in paise (cents).
+export interface HostEarnings {
+  total_earnings_cents: number;
+  available_balance_cents: number;
+  pending_clearance_cents: number;
+  current_balance_cents: number;
+  in_flight_payouts_cents: number;
+  estimated_clearance_at?: string;
+  platform_fee?: PlatformFeeConfig;
+}
+
+// fetchHostEarnings returns a host's live earnings + balance breakdown.
+export function fetchHostEarnings(hostId: string): Promise<HostEarnings> {
+  return apiFetch<HostEarnings>(`/admin/hosts/${hostId}/earnings`);
+}
+
 // fetchPlatformFeeConfig returns the effective global commission split — the
 // fallback applied to any host without a per-host override (see
 // setHostPlatformFee above).

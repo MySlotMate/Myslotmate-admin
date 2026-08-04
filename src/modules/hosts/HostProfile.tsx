@@ -7,13 +7,13 @@ import { Button } from '../../components/ui/Button';
 import { Table } from '../../components/ui/Table';
 import { fetchHostDetail, fetchHostEvents } from '../../api/directory';
 import type { HostDetail, HostEvent } from '../../api/directory';
-import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive } from '../../api/hosts';
-import type { PlatformFeeConfig } from '../../api/hosts';
+import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive, fetchHostEarnings } from '../../api/hosts';
+import type { PlatformFeeConfig, HostEarnings } from '../../api/hosts';
 import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
 import { EditHostProfileModal } from './EditHostProfileModal';
 
-type Tab = 'details' | 'events';
+type Tab = 'details' | 'events' | 'earnings';
 
 export const HostProfile: React.FC = () => {
   const { hostId } = useParams<{ hostId: string }>();
@@ -35,6 +35,10 @@ export const HostProfile: React.FC = () => {
   const [events, setEvents] = useState<HostEvent[] | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
+
+  const [earnings, setEarnings] = useState<HostEarnings | null>(null);
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsError, setEarningsError] = useState<string | null>(null);
 
   const loadDetail = useCallback(async () => {
     if (!hostId) return;
@@ -66,6 +70,19 @@ export const HostProfile: React.FC = () => {
     }
   }, [hostId]);
 
+  const loadEarnings = useCallback(async () => {
+    if (!hostId) return;
+    setEarningsLoading(true);
+    setEarningsError(null);
+    try {
+      setEarnings(await fetchHostEarnings(hostId));
+    } catch (err) {
+      setEarningsError(err instanceof Error ? err.message : 'Failed to load earnings.');
+    } finally {
+      setEarningsLoading(false);
+    }
+  }, [hostId]);
+
   useEffect(() => { void loadDetail(); }, [loadDetail]);
 
   // The global default split is the same for every host — fetch it once so
@@ -85,6 +102,13 @@ export const HostProfile: React.FC = () => {
       void loadEvents();
     }
   }, [tab, events, eventsLoading, loadEvents]);
+
+  // Lazily load earnings the first time the Earnings tab is opened.
+  useEffect(() => {
+    if (tab === 'earnings' && earnings === null && !earningsLoading && !earningsError) {
+      void loadEarnings();
+    }
+  }, [tab, earnings, earningsLoading, earningsError, loadEarnings]);
 
   const handleStatusChange = async (status: HostApplicationStatus) => {
     if (!hostId || !detail || status === detail.host.application_status) return;
@@ -294,12 +318,15 @@ export const HostProfile: React.FC = () => {
         <TabButton active={tab === 'events'} onClick={() => setTab('events')}>
           Events{events ? ` (${events.length})` : ''}
         </TabButton>
+        <TabButton active={tab === 'earnings'} onClick={() => setTab('earnings')}>Earnings</TabButton>
       </div>
 
       {tab === 'details' ? (
         <DetailsTab host={host} user={user} />
-      ) : (
+      ) : tab === 'events' ? (
         <EventsTab events={events} loading={eventsLoading} error={eventsError} onRetry={() => void loadEvents()} />
+      ) : (
+        <EarningsTab earnings={earnings} loading={earningsLoading} error={earningsError} onRetry={() => void loadEarnings()} />
       )}
 
       {editing && (
@@ -481,3 +508,65 @@ const EventsTab: React.FC<{ events: HostEvent[] | null; loading: boolean; error:
     </Table>
   );
 };
+
+// Formats paise (cents) as ₹ with 2 decimals + thousands separators, matching
+// the host dashboard exactly, e.g. 90 → "₹0.90", 189600 → "₹1,896.00".
+const fmtRupees = (cents: number) =>
+  `₹${((cents ?? 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const EarningsTab: React.FC<{ earnings: HostEarnings | null; loading: boolean; error: string | null; onRetry: () => void }> = ({ earnings, loading, error, onRetry }) => {
+  if (loading) {
+    return (
+      <Card className="p-10 text-center">
+        <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+        <p className="mt-3 text-slate-400 font-medium">Loading earnings…</p>
+      </Card>
+    );
+  }
+  if (error) {
+    return (
+      <Card className="p-10 text-center">
+        <p className="text-rose-600 font-semibold">{error}</p>
+        <Button variant="secondary" className="mt-4" onClick={onRetry}>Retry</Button>
+      </Card>
+    );
+  }
+  if (!earnings) {
+    return (
+      <Card className="p-10 text-center">
+        <p className="text-slate-400 font-medium">No earnings data for this host yet.</p>
+      </Card>
+    );
+  }
+
+  const fee = earnings.platform_fee;
+
+  return (
+    <div className="space-y-6">
+      {/* Money breakdown — same figures the host sees on their dashboard. */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <MoneyCard label="Total earnings" hint="Lifetime net (confirmed bookings, refunds deducted)" value={fmtRupees(earnings.total_earnings_cents)} accent />
+        <MoneyCard label="Available to withdraw" hint="Event has happened, not yet paid out" value={fmtRupees(earnings.available_balance_cents)} />
+        <MoneyCard label="Pending clearance" hint="Locked until the event happens" value={fmtRupees(earnings.pending_clearance_cents)} />
+        <MoneyCard label="Current balance" hint="Still owed (pending + available)" value={fmtRupees(earnings.current_balance_cents)} />
+        <MoneyCard label="In-flight / paid out" hint="Payouts pending, processing or completed" value={fmtRupees(earnings.in_flight_payouts_cents)} />
+        {fee && (
+          <MoneyCard label="Commission split" hint="Host keeps / platform keeps" value={`${fee.host_percentage}% / ${fee.platform_percentage}%`} />
+        )}
+      </div>
+      {earnings.estimated_clearance_at && (
+        <p className="text-xs font-semibold text-slate-400">
+          Estimated next clearance: {new Date(earnings.estimated_clearance_at).toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const MoneyCard: React.FC<{ label: string; hint: string; value: string; accent?: boolean }> = ({ label, hint, value, accent }) => (
+  <Card className="p-5">
+    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
+    <p className={`mt-2 text-2xl font-extrabold ${accent ? 'text-brand-700' : 'text-ink'}`}>{value}</p>
+    <p className="mt-1 text-xs text-slate-400">{hint}</p>
+  </Card>
+);

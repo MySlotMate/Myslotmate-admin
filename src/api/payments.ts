@@ -113,6 +113,22 @@ export function fetchPaymentsSummary(): Promise<PaymentsSummary> {
   return apiFetch<PaymentsSummary>('/admin/payments/summary');
 }
 
+// Result of a manual "Sync payout status" run.
+export interface ReconcileResult {
+  checked: number;
+  finalized: number;
+  skipped: number;
+  errors: number;
+}
+
+// reconcilePayouts polls Cashfree for every payout stuck in 'processing' and
+// finalizes those that reached a terminal state. Returns a run summary.
+export function reconcilePayouts(): Promise<ReconcileResult> {
+  return apiFetch<ReconcileResult>('/admin/payments/reconcile-payouts', {
+    method: 'POST',
+  });
+}
+
 export function sourceRefund(
   paymentId: string,
   body: { amount_cents: number; reason: string },
