@@ -165,6 +165,7 @@ export interface AdminEvent {
   bookings: number;
   rating: number;
   status: string; // draft | live | paused | cancelled
+  is_expired: boolean; // non-recurring event whose time has passed
 }
 
 export interface EventQuery {

@@ -20,15 +20,24 @@ const PAGE_SIZE = 10;
 
 const STATUS_OPTIONS = ['live', 'draft', 'paused', 'cancelled'];
 
-const statusColor = (status: string): 'green' | 'blue' | 'amber' | 'rose' => {
+const statusColor = (status: string): 'green' | 'blue' | 'amber' | 'rose' | 'slate' => {
   switch (status) {
     case 'live': return 'green';
     case 'draft': return 'blue';
     case 'paused': return 'amber';
     case 'cancelled': return 'rose';
+    case 'expired': return 'slate';
     default: return 'blue';
   }
 };
+
+// A published event (live/paused) whose time has passed shows as "expired" — its
+// stored status would otherwise read a misleading "live". Draft and cancelled keep
+// their own status (they communicate their state already).
+const displayStatus = (exp: { status: string; is_expired: boolean }): string =>
+  exp.is_expired && (exp.status === 'live' || exp.status === 'paused')
+    ? 'expired'
+    : exp.status;
 
 export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery }) => {
   const navigate = useNavigate();
@@ -229,7 +238,7 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
               <td className="px-6 py-4 align-top text-slate-600 font-medium">{exp.bookings}</td>
               <td className="px-6 py-4 align-top font-extrabold text-brand-600">{exp.rating ? `${exp.rating} ★` : '—'}</td>
               <td className="px-6 py-4 align-top">
-                <Badge color={statusColor(exp.status)}>{exp.status}</Badge>
+                <Badge color={statusColor(displayStatus(exp))}>{displayStatus(exp)}</Badge>
               </td>
               <td className="px-6 py-4 align-top">
                 <div className="flex items-center gap-2">
