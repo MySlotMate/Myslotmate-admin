@@ -163,9 +163,6 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">Experiences management</p>
-          <h3 className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-            Review listings, feature standout sessions, and suspend risky inventory.
-          </h3>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="secondary" onClick={() => alert('Creating featured category landing page...')}>
@@ -218,7 +215,7 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
           <Button variant="secondary" className="mt-4" onClick={() => void loadEvents()}>Retry</Button>
         </Card>
       ) : events.length > 0 ? (
-        <Table headers={['Title', 'Host Name', 'City', 'Category', 'Price', 'Bookings', 'Rating', 'Status', 'Actions']}>
+        <Table headers={['Title', 'Host Name', 'City', 'Category', 'Price', 'Bookings', 'Status', 'Actions']}>
           {events.map((exp) => (
             <tr key={exp.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
               <td className="px-6 py-4 align-top font-bold text-ink max-w-[220px]">{exp.title}</td>
@@ -236,7 +233,6 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
                 )}
               </td>
               <td className="px-6 py-4 align-top text-slate-600 font-medium">{exp.bookings}</td>
-              <td className="px-6 py-4 align-top font-extrabold text-brand-600">{exp.rating ? `${exp.rating} ★` : '—'}</td>
               <td className="px-6 py-4 align-top">
                 <Badge color={statusColor(displayStatus(exp))}>{displayStatus(exp)}</Badge>
               </td>

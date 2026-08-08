@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMockData } from '../../context/MockDataContext';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import {
+  fetchAdminNotificationSettings,
+  updateAdminNotificationSettings,
+  type AdminWhatsAppNumber,
+} from '../../api/settings';
+import { Phone, Plus, Trash2, Check, ShieldAlert, Loader2 } from 'lucide-react';
 
 export const SettingsManager: React.FC = () => {
   const {
@@ -19,6 +25,81 @@ export const SettingsManager: React.FC = () => {
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState('City Ops Lead');
   const [inviteScope, setInviteScope] = useState('');
+
+  // WhatsApp Alert Numbers State
+  const [numbers, setNumbers] = useState<AdminWhatsAppNumber[]>([]);
+  const [notifLoading, setNotifLoading] = useState(true);
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+  const [justSavedNotif, setJustSavedNotif] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    setNotifLoading(true);
+    async function loadConfig() {
+      const res = await fetchAdminNotificationSettings();
+      if (alive) {
+        setNumbers(res.admin_whatsapp_numbers || []);
+        setNotifLoading(false);
+      }
+    }
+    void loadConfig();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const handleSaveNotif = async (updatedList: AdminWhatsAppNumber[]) => {
+    setNotifSaving(true);
+    setNotifError(null);
+    try {
+      await updateAdminNotificationSettings({ admin_whatsapp_numbers: updatedList });
+      setJustSavedNotif(true);
+      setTimeout(() => setJustSavedNotif(false), 2000);
+    } catch (err) {
+      setNotifError(err instanceof Error ? err.message : 'Failed to save WhatsApp alert settings.');
+    } finally {
+      setNotifSaving(false);
+    }
+  };
+
+  const handleToggleActiveNotif = (index: number) => {
+    const next = numbers.map((item, i) =>
+      i === index ? { ...item, active: !item.active } : item
+    );
+    setNumbers(next);
+    void handleSaveNotif(next);
+  };
+
+  const handleDeleteNotif = (index: number) => {
+    const next = numbers.filter((_, i) => i !== index);
+    setNumbers(next);
+    void handleSaveNotif(next);
+  };
+
+  const handleAddNotifNumber = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPhone.trim()) {
+      alert('Please enter a valid phone number.');
+      return;
+    }
+    let formattedPhone = newPhone.trim();
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+91' + formattedPhone.replace(/^0+/, '');
+    }
+    const newItem: AdminWhatsAppNumber = {
+      label: newLabel.trim() || 'Admin Operations',
+      phone: formattedPhone,
+      active: true,
+    };
+    const next = [...numbers, newItem];
+    setNumbers(next);
+    setNewLabel('');
+    setNewPhone('');
+    void handleSaveNotif(next);
+  };
 
   const handleSaveSettings = () => {
     alert('Global commission fee margins and operational parameters saved successfully.');
@@ -183,6 +264,130 @@ export const SettingsManager: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </Card>
+
+        {/* Admin WhatsApp Alert Recipients */}
+        <Card className="p-6 col-span-full">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-ink flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-brand-600" /> WhatsApp Host Approval Alert Recipients
+              </h3>
+              <p className="text-xs text-mist mt-0.5">
+                Configure admin phone numbers that receive automated Kapso WhatsApp alerts whenever a host submits a pending application request.
+              </p>
+            </div>
+            {justSavedNotif && (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 animate-fadeIn">
+                <Check className="h-4 w-4" /> Changes saved
+              </span>
+            )}
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Existing numbers list */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                Active Admin Recipients ({numbers.length})
+              </h4>
+              {notifLoading ? (
+                <div className="p-6 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-brand-600" />
+                  <p className="mt-2 text-xs text-slate-400 font-medium">Loading WhatsApp alert recipients…</p>
+                </div>
+              ) : numbers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
+                  No WhatsApp alert recipients configured yet. Add a recipient number below.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {numbers.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition ${
+                        item.active ? 'border-slate-200 bg-white shadow-xs' : 'border-slate-100 bg-slate-50/60 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-2 rounded-lg ${item.active ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-400'}`}>
+                          <Phone className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-bold text-ink">{item.label}</p>
+                          <p className="truncate text-[11px] font-mono font-medium text-slate-500">{item.phone}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActiveNotif(idx)}
+                          className="cursor-pointer focus:outline-none"
+                          title={item.active ? 'Disable alerts' : 'Enable alerts'}
+                        >
+                          <Badge color={item.active ? 'green' : 'slate'}>
+                            {item.active ? 'Active' : 'Disabled'}
+                          </Badge>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNotif(idx)}
+                          title="Remove recipient"
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add recipient form */}
+            <form onSubmit={handleAddNotifNumber} className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                <Plus className="h-3.5 w-3.5 text-brand-600" /> Add Recipient Number
+              </h4>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1" htmlFor="settingsNumLabel">
+                    Recipient Role / Name
+                  </label>
+                  <input
+                    id="settingsNumLabel"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-ink outline-none transition focus:border-brand-400"
+                    type="text"
+                    placeholder="e.g. Operations Lead"
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1" htmlFor="settingsNumPhone">
+                    WhatsApp Phone Number
+                  </label>
+                  <input
+                    id="settingsNumPhone"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-ink outline-none transition focus:border-brand-400"
+                    type="tel"
+                    placeholder="e.g. +919876543210"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {notifError && <p className="text-xs font-semibold text-rose-600">{notifError}</p>}
+
+              <Button variant="primary" type="submit" size="sm" className="w-full flex items-center justify-center gap-1.5" disabled={notifSaving}>
+                {notifSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                {notifSaving ? 'Saving changes…' : 'Add Recipient Number'}
+              </Button>
+            </form>
           </div>
         </Card>
       </div>

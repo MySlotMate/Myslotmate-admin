@@ -2,7 +2,7 @@ import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
 
-interface PaginationProps {
+export interface PaginationProps {
   page: number;
   pageSize: number;
   total: number;
@@ -10,8 +10,6 @@ interface PaginationProps {
   disabled?: boolean;
 }
 
-// Server-pagination footer: shows the current window and total, with
-// Previous/Next controls bounded to the available pages.
 export const Pagination: React.FC<PaginationProps> = ({
   page,
   pageSize,
@@ -27,35 +25,34 @@ export const Pagination: React.FC<PaginationProps> = ({
   const canNext = page < totalPages && !disabled;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-100/80 bg-white/95 px-5 py-3 shadow-soft">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/95 px-5 py-3 shadow-soft backdrop-blur-md">
       <p className="text-xs font-semibold text-slate-500">
-        Showing <span className="text-ink font-bold">{start}</span>–
-        <span className="text-ink font-bold">{end}</span> of{' '}
-        <span className="text-ink font-bold">{total}</span>
+        Showing <span className="font-extrabold text-ink">{start}</span>–
+        <span className="font-extrabold text-ink">{end}</span> of{' '}
+        <span className="font-extrabold text-ink">{total}</span> items
       </p>
       <div className="flex items-center gap-3">
         <Button
           variant="action"
           disabled={!canPrev}
           onClick={() => onPageChange(page - 1)}
-          className="gap-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+          leftIcon={<ChevronLeft className="h-4 w-4" />}
         >
-          <ChevronLeft className="h-4 w-4" />
           Previous
         </Button>
-        <span className="text-xs font-bold text-slate-600">
-          Page {page} of {totalPages}
+        <span className="rounded-xl bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-700">
+          {page} / {totalPages}
         </span>
         <Button
           variant="action"
           disabled={!canNext}
           onClick={() => onPageChange(page + 1)}
-          className="gap-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+          rightIcon={<ChevronRight className="h-4 w-4" />}
         >
           Next
-          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>
   );
 };
+

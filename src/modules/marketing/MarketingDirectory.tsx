@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { fetchEvents, fetchBookings, bulkNotifyEventGuests, type AdminEvent } from '../../api/directory';
 import { fetchMarketingConfig, updateMarketingConfig, type HomepageMarketingConfig } from '../../api/marketing';
-import { Search, Star, LayoutGrid, X, Save, Check, Loader2 } from 'lucide-react';
+import { Search, Star, LayoutGrid, X, Save, Check, Loader2, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 
 export const MarketingDirectory: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'homepage' | 'campaigns' | 'broadcasts'>('homepage');
@@ -104,6 +104,60 @@ export const MarketingDirectory: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
 
+  // Drag and drop reordering state
+  const [dragInfo, setDragInfo] = useState<{ listKey: 'featured_event_ids' | 'curated_event_ids'; index: number } | null>(null);
+
+  const saveUpdatedConfig = async (newConfig: HomepageMarketingConfig) => {
+    setConfigSaving(true);
+    setSaveError(null);
+    try {
+      await updateMarketingConfig(newConfig);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save configuration.');
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const moveItem = (listKey: 'featured_event_ids' | 'curated_event_ids', fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0) return;
+    const list = [...(config[listKey] ?? [])];
+    if (toIdx < 0 || toIdx >= list.length) return;
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+    const newConfig = { ...config, [listKey]: list };
+    setConfig(newConfig);
+    void saveUpdatedConfig(newConfig);
+  };
+
+  const handleDragStart = (listKey: 'featured_event_ids' | 'curated_event_ids', index: number) => {
+    setDragInfo({ listKey, index });
+  };
+
+  const handleDragOver = (e: React.DragEvent, listKey: 'featured_event_ids' | 'curated_event_ids', targetIndex: number) => {
+    e.preventDefault();
+    if (!dragInfo || dragInfo.listKey !== listKey || dragInfo.index === targetIndex) return;
+
+    const fromIdx = dragInfo.index;
+    const list = [...(config[listKey] ?? [])];
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(targetIndex, 0, moved);
+
+    setConfig(prev => ({ ...prev, [listKey]: list }));
+    setDragInfo({ listKey, index: targetIndex });
+  };
+
+  const handleDragEnd = () => {
+    if (dragInfo) {
+      setDragInfo(null);
+      void saveUpdatedConfig(config);
+    }
+  };
+
   // Live events (for pinning)
   const [allEvents, setAllEvents] = useState<AdminEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -136,17 +190,7 @@ export const MarketingDirectory: React.FC = () => {
   }, []);
 
   const handleSaveConfig = async () => {
-    setConfigSaving(true);
-    setSaveError(null);
-    try {
-      await updateMarketingConfig(config);
-      setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 2500);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save configuration.');
-    } finally {
-      setConfigSaving(false);
-    }
+    void saveUpdatedConfig(config);
   };
 
   const featuredIds = config.featured_event_ids ?? [];
@@ -154,20 +198,30 @@ export const MarketingDirectory: React.FC = () => {
   const featuredLimit = config.featured_limit ?? 3;
   const curatedLimit = config.curated_limit ?? 8;
 
-  const toggleFeatured = (id: string) =>
-    setConfig(prev => {
-      const ids = prev.featured_event_ids ?? [];
-      return { ...prev, featured_event_ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] };
-    });
-  const toggleCurated = (id: string) =>
-    setConfig(prev => {
-      const ids = prev.curated_event_ids ?? [];
-      return { ...prev, curated_event_ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] };
-    });
-  const removeFeatured = (id: string) =>
-    setConfig(prev => ({ ...prev, featured_event_ids: (prev.featured_event_ids ?? []).filter(x => x !== id) }));
-  const removeCurated = (id: string) =>
-    setConfig(prev => ({ ...prev, curated_event_ids: (prev.curated_event_ids ?? []).filter(x => x !== id) }));
+  const toggleFeatured = (id: string) => {
+    const ids = config.featured_event_ids ?? [];
+    const newIds = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id];
+    const newConfig = { ...config, featured_event_ids: newIds };
+    setConfig(newConfig);
+    void saveUpdatedConfig(newConfig);
+  };
+  const toggleCurated = (id: string) => {
+    const ids = config.curated_event_ids ?? [];
+    const newIds = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id];
+    const newConfig = { ...config, curated_event_ids: newIds };
+    setConfig(newConfig);
+    void saveUpdatedConfig(newConfig);
+  };
+  const removeFeatured = (id: string) => {
+    const newConfig = { ...config, featured_event_ids: (config.featured_event_ids ?? []).filter(x => x !== id) };
+    setConfig(newConfig);
+    void saveUpdatedConfig(newConfig);
+  };
+  const removeCurated = (id: string) => {
+    const newConfig = { ...config, curated_event_ids: (config.curated_event_ids ?? []).filter(x => x !== id) };
+    setConfig(newConfig);
+    void saveUpdatedConfig(newConfig);
+  };
 
   const getEventDetails = (id: string) => allEvents.find(e => e.id === id);
 
@@ -196,10 +250,11 @@ export const MarketingDirectory: React.FC = () => {
     alert(`Campaign "${newCampaignName}" launched successfully!`);
   };
 
-  // ── Compact pinned panel ───────────────────────────────────────────────────
+  // ── Compact pinned panel with drag-to-reorder ───────────────────────────────
   const renderPinnedPanel = (
     title: string,
     Icon: typeof Star,
+    listKey: 'featured_event_ids' | 'curated_event_ids',
     ids: string[],
     limit: number,
     onRemove: (id: string) => void,
@@ -212,9 +267,12 @@ export const MarketingDirectory: React.FC = () => {
           <h4 className="flex items-center gap-1.5 text-sm font-bold text-ink">
             <Icon className={`h-4 w-4 ${accent}`} /> {title}
           </h4>
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${over ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-            {ids.length}/{limit}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-400 hidden sm:inline">Drag items to reorder</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${over ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+              {ids.length}/{limit}
+            </span>
+          </div>
         </div>
         {over && (
           <p className="mt-1 text-[11px] font-semibold text-amber-600">Only the first {limit} will show on the homepage.</p>
@@ -228,15 +286,56 @@ export const MarketingDirectory: React.FC = () => {
             {ids.map((id, i) => {
               const d = getEventDetails(id);
               const hidden = i >= limit;
+              const isDragging = dragInfo?.listKey === listKey && dragInfo?.index === i;
               return (
-                <div key={id} className={`flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 ${hidden ? 'opacity-50' : ''}`}>
+                <div
+                  key={id}
+                  draggable
+                  onDragStart={() => handleDragStart(listKey, i)}
+                  onDragOver={(e) => handleDragOver(e, listKey, i)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-200 ease-out select-none ${
+                    isDragging
+                      ? 'border-brand-500 bg-brand-50/90 shadow-md ring-2 ring-brand-500/30 scale-[1.02] z-20 cursor-grabbing'
+                      : 'border-slate-200/80 bg-slate-50 hover:border-brand-300 hover:bg-white shadow-xs cursor-grab'
+                  } ${hidden && !isDragging ? 'opacity-50' : ''}`}
+                >
+                  <GripVertical className={`h-4 w-4 shrink-0 transition-colors ${isDragging ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`} />
                   <span className="w-4 shrink-0 text-center text-[10px] font-black text-slate-400">{i + 1}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-bold text-ink">{d?.title ?? `Event ${id.slice(0, 8)}…`}</p>
                     <p className="truncate text-[10px] font-semibold text-slate-400">{d ? `${d.hostName} · ${d.city}` : 'Not live / not found'}</p>
                   </div>
                   {hidden && <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-amber-600">hidden</span>}
-                  <button onClick={() => onRemove(id)} title="Unpin" className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600">
+                  
+                  {/* Up / Down reorder controls */}
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      disabled={i === 0}
+                      onClick={() => moveItem(listKey, i, i - 1)}
+                      title="Move up"
+                      className="p-1 rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={i === ids.length - 1}
+                      onClick={() => moveItem(listKey, i, i + 1)}
+                      title="Move down"
+                      className="p-1 rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onRemove(id)}
+                    title="Unpin"
+                    className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                  >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -250,15 +349,6 @@ export const MarketingDirectory: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">Marketing operations</p>
-          <h3 className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-            Monitor campaign performance, referral loops, and feature placement.
-          </h3>
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="flex max-w-xl gap-1 rounded-2xl border border-slate-100 bg-white/40 p-1 backdrop-blur-sm">
         {(['homepage', 'campaigns', 'broadcasts'] as const).map(t => (
@@ -321,14 +411,14 @@ export const MarketingDirectory: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
               {/* Left: searchable live events */}
-              <Card className="flex flex-col p-4">
-                <div className="mb-3 flex items-center justify-between">
+              <Card className="flex flex-col p-4 h-full">
+                <div className="mb-3 flex items-center justify-between shrink-0">
                   <h4 className="text-sm font-bold text-ink">Live experiences</h4>
                   <span className="text-[11px] font-semibold text-slate-400">{filteredEvents.length} shown</span>
                 </div>
-                <div className="mb-3 flex items-center gap-2 rounded-xl border border-brand-100 bg-white px-3 py-2 shadow-sm">
+                <div className="mb-3 flex items-center gap-2 rounded-xl border border-brand-100 bg-white px-3 py-2 shadow-sm shrink-0">
                   <Search className="h-4 w-4 shrink-0 text-slate-400" />
                   <input
                     className="w-full bg-transparent text-sm text-slate-700 outline-none"
@@ -340,14 +430,14 @@ export const MarketingDirectory: React.FC = () => {
                 </div>
 
                 {eventsLoading ? (
-                  <div className="p-8 text-center">
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
                     <p className="mt-2 text-xs text-slate-400">Loading live events…</p>
                   </div>
                 ) : filteredEvents.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-slate-400">No live events match your search.</div>
+                  <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-slate-400">No live events match your search.</div>
                 ) : (
-                  <div className="max-h-[62vh] space-y-1.5 overflow-y-auto pr-1">
+                  <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1">
                     {filteredEvents.map((event) => {
                       const isF = featuredIds.includes(event.id);
                       const isC = curatedIds.includes(event.id);
@@ -375,8 +465,8 @@ export const MarketingDirectory: React.FC = () => {
 
               {/* Right: what's on the homepage */}
               <div className="space-y-4">
-                {renderPinnedPanel('Featured slideshow', Star, featuredIds, featuredLimit, removeFeatured, 'text-amber-500')}
-                {renderPinnedPanel('Discover grid', LayoutGrid, curatedIds, curatedLimit, removeCurated, 'text-brand-500')}
+                {renderPinnedPanel('Featured slideshow', Star, 'featured_event_ids', featuredIds, featuredLimit, removeFeatured, 'text-amber-500')}
+                {renderPinnedPanel('Discover grid', LayoutGrid, 'curated_event_ids', curatedIds, curatedLimit, removeCurated, 'text-brand-500')}
               </div>
             </div>
           </div>

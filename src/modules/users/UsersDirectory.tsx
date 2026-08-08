@@ -115,31 +115,28 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">Users directory</p>
-          <h3 className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-            Track high-value guests, activity levels, and account health.
-          </h3>
+          <p className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-brand-700">Users Directory</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => alert('Import user spreadsheet integration...')}>
+          <Button variant="secondary" size="sm" onClick={() => alert('Import user spreadsheet integration...')}>
             Import users
           </Button>
-          <Button variant="primary" onClick={() => alert('Opening internal workspace notes tool...')}>
+          <Button variant="primary" size="sm" onClick={() => alert('Opening internal workspace notes tool...')}>
             Add note
           </Button>
         </div>
       </div>
 
       {/* Filter Surface */}
-      <div className="rounded-3xl border border-brand-100/80 bg-white/95 shadow-soft backdrop-blur-md p-5">
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))]">
-          <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
-            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-              <circle cx="11" cy="11" r="7"></circle>
-              <path d="M20 20l-3.5-3.5" stroke-linecap="round"></path>
+      <div className="rounded-3xl border border-slate-200/80 bg-white/95 shadow-soft backdrop-blur-md p-4 sm:p-5">
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))]">
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 shadow-xs focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/20">
+            <svg className="h-4 w-4 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
             </svg>
             <input 
-              className="w-full bg-transparent text-sm outline-none" 
+              className="w-full bg-transparent text-xs font-semibold outline-none placeholder:text-slate-400" 
               type="search" 
               placeholder="Filter by name, email, ID..." 
               value={localSearch}
@@ -147,7 +144,7 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
             />
           </div>
 
-          <select className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+          <select className="w-full rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-brand-400 focus:bg-white" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
             <option>All cities</option>
             <option>Delhi</option>
             <option>Mumbai</option>
@@ -157,14 +154,14 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
             <option>Goa</option>
           </select>
 
-          <select className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400" value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
+          <select className="w-full rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-brand-400 focus:bg-white" value={tierFilter} onChange={(e) => setTierFilter(e.target.value)}>
             <option>All spending tiers</option>
             <option>High value</option>
             <option>Repeat booker</option>
             <option>New user</option>
           </select>
 
-          <Button variant="secondary" onClick={handleReset}>
+          <Button variant="secondary" size="sm" onClick={handleReset}>
             Reset filters
           </Button>
         </div>
@@ -172,9 +169,9 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
 
       {/* Table Section */}
       {loading ? (
-        <Card className="p-10 text-center">
-          <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-          <p className="mt-3 text-slate-400 font-medium">Loading users…</p>
+        <Card className="p-12 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-3 border-brand-200 border-t-brand-600" />
+          <p className="mt-3 text-slate-400 text-xs font-bold uppercase tracking-wider">Loading users…</p>
         </Card>
       ) : error ? (
         <Card className="p-10 text-center">
@@ -184,19 +181,23 @@ export const UsersDirectory: React.FC<UsersDirectoryProps> = ({ searchQuery }) =
           </Button>
         </Card>
       ) : filteredUsers.length > 0 ? (
-        <Table headers={['Name', 'Email', 'City', 'Bookings', 'Spent', 'Join Date', 'Actions']}>
-          {filteredUsers.map((user) => (
-            <tr key={user.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
-              <td className="px-6 py-4 align-top font-bold text-ink">{user.name}</td>
-              <td className="px-6 py-4 align-top text-slate-600">{user.email}</td>
-              <td className="px-6 py-4 align-top text-slate-600">{user.city}</td>
-              <td className="px-6 py-4 align-top text-slate-600 font-medium">{user.totalBookings}</td>
-              <td className="px-6 py-4 align-top font-extrabold text-ink">₹{user.totalSpent}</td>
-              <td className="px-6 py-4 align-top text-slate-500">{user.joinDate}</td>
-              <td className="px-6 py-4 align-top">
-                <div className="flex gap-2">
+        <Table headers={['S.No', 'User', 'Email', 'Bookings', 'Spent', 'Joined', 'Actions']}>
+          {filteredUsers.map((user, idx) => (
+            <tr key={user.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/30 transition-colors">
+              <td className="px-6 py-3.5 align-middle font-extrabold text-xs text-slate-400">
+                {(page - 1) * PAGE_SIZE + idx + 1}
+              </td>
+              <td className="px-6 py-3.5 align-middle font-bold text-ink text-sm">
+                {user.name}
+              </td>
+              <td className="px-6 py-3.5 align-middle text-slate-600 font-medium text-xs">{user.email}</td>
+              <td className="px-6 py-3.5 align-middle text-slate-600 font-bold text-xs">{user.totalBookings}</td>
+              <td className="px-6 py-3.5 align-middle font-black text-ink text-sm">₹{user.totalSpent}</td>
+              <td className="px-6 py-3.5 align-middle text-slate-500 text-xs">{user.joinDate}</td>
+              <td className="px-6 py-3.5 align-middle">
+                <div className="flex gap-1.5">
                   <Button variant="action" onClick={() => setSelectedUser(user)}>
-                    View
+                    View Profile
                   </Button>
                   <Button 
                     variant="action" 

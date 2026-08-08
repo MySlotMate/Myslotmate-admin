@@ -21,7 +21,8 @@ export const Layout: React.FC<LayoutProps> = ({
       
       <div className="flex-1 min-w-0 flex flex-col">
         <Header 
-          onOpenSidebar={() => setSidebarOpen(true)} 
+          onOpenSidebar={() => setSidebarOpen((prev) => !prev)} 
+          isSidebarOpen={sidebarOpen}
           globalSearch={globalSearch}
           onSearchChange={onSearchChange}
         />

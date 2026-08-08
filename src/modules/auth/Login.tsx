@@ -71,15 +71,15 @@ export const Login: React.FC = () => {
           )}
 
           <div>
-            <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="email">
+            <label className="mb-2 block text-xs font-bold text-slate-700" htmlFor="email">
               Admin Email
             </label>
-            <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 shadow-xs focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
               <Mail className="h-4 w-4 text-slate-400 shrink-0" />
               <input
                 id="email"
                 type="email"
-                className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
                 placeholder="admin@myslotmate.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -89,15 +89,15 @@ export const Login: React.FC = () => {
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="password">
+            <label className="mb-2 block text-xs font-bold text-slate-700" htmlFor="password">
               Access Token / Password
             </label>
-            <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 shadow-xs focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
               <KeyRound className="h-4 w-4 text-slate-400 shrink-0" />
               <input
                 id="password"
                 type="password"
-                className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -106,8 +106,8 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          <Button variant="primary" type="submit" className="w-full justify-center mt-3 py-3" disabled={loading}>
-            {loading ? 'Authenticating Access...' : 'Verify & Enter'}
+          <Button variant="primary" type="submit" className="w-full justify-center mt-3 py-3" isLoading={loading}>
+            Verify & Enter
           </Button>
         </form>
 

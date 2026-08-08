@@ -159,9 +159,6 @@ export const BookingsDirectory: React.FC<BookingsDirectoryProps> = ({ searchQuer
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">Bookings management</p>
-          <h3 className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink md:text-3xl">
-            Follow every reservation from checkout to attendance.
-          </h3>
         </div>
         <Button variant="primary" onClick={() => alert('Opening payments/bookings dispute exceptions dashboard...')}>
           Open exception queue

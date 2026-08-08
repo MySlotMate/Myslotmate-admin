@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CalendarRange, Users, Ticket, IndianRupee, Wallet,
-  ArrowUpRight, TrendingUp, ChevronRight, AlertCircle, Trophy, Flame,
+  ArrowUpRight, TrendingUp, ChevronRight, AlertCircle, Trophy, Flame, RefreshCw,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { StatCard } from '../../components/ui/StatCard';
 import { fetchDashboardStats, type DashboardStats } from '../../api/dashboard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -56,8 +57,8 @@ export const Overview: React.FC = () => {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-mist">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-          <p className="text-xs font-bold uppercase tracking-[0.22em]">Loading dashboard…</p>
+          <div className="h-9 w-9 animate-spin rounded-full border-3 border-brand-200 border-t-brand-600" />
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Loading metrics…</p>
         </div>
       </div>
     );
@@ -73,11 +74,11 @@ export const Overview: React.FC = () => {
   }
 
   const kpis = [
-    { label: 'Total Events', value: formatCount(stats.totalEvents), icon: CalendarRange, wrap: 'bg-brand-50', color: 'text-brand-600', to: '/experiences', hint: 'Live & draft experiences' },
-    { label: 'Total Hosts', value: formatCount(stats.totalHosts), icon: Users, wrap: 'bg-sky-50', color: 'text-sky-600', to: '/hosts', hint: 'Approved & pending' },
+    { label: 'Total Events', value: formatCount(stats.totalEvents), icon: CalendarRange, wrap: 'bg-sky-50', color: 'text-sky-600', to: '/experiences', hint: 'Live & draft experiences' },
+    { label: 'Total Hosts', value: formatCount(stats.totalHosts), icon: Users, wrap: 'bg-indigo-50', color: 'text-indigo-600', to: '/hosts', hint: 'Approved & pending' },
     { label: 'Total Bookings', value: formatCount(stats.totalBookings), icon: Ticket, wrap: 'bg-violet-50', color: 'text-violet-600', to: '/bookings', hint: 'All-time reservations' },
     { label: 'Total Revenue', value: formatINR(stats.totalRevenue), icon: IndianRupee, wrap: 'bg-emerald-50', color: 'text-emerald-600', to: '/bookings', hint: 'Gross booking value', rupee: true },
-    { label: 'Platform Income', value: formatINR(stats.platformIncome), icon: Wallet, wrap: 'bg-amber-50', color: 'text-amber-600', to: '/payments', hint: 'Our net service fees', rupee: true },
+    { label: 'Platform Income', value: formatINR(stats.platformIncome), icon: Wallet, wrap: 'bg-amber-50', color: 'text-amber-600', to: '/payments', hint: 'Net service fees', rupee: true },
   ];
 
   const monthlyTotal = stats.monthlyBookings.reduce((s, m) => s + m.count, 0);
@@ -88,37 +89,37 @@ export const Overview: React.FC = () => {
   const trendDown = trendPct < 0;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="font-display text-xl font-semibold tracking-tight text-ink md:text-2xl">Marketplace at a glance</h3>
-        <p className="text-[11px] font-semibold text-slate-400">Updated just now</p>
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brand-700">Marketplace Real-time Stats</p>
+          <h3 className="font-display text-xl font-extrabold tracking-tight text-ink md:text-2xl">Executive Dashboard</h3>
+        </div>
+        <button
+          onClick={() => void loadStats()}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 shadow-xs hover:border-brand-300 hover:text-brand-700 transition cursor-pointer"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
-        {kpis.map((k) => {
-          const Icon = k.icon;
-          return (
-            <button
-              key={k.label}
-              onClick={() => navigate(k.to)}
-              className="group rounded-2xl border border-brand-100/70 bg-white/95 p-3 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-panel cursor-pointer"
-            >
-              <div className="flex items-center justify-between">
-                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${k.wrap} ${k.color}`}>
-                  <Icon className="h-4 w-4" />
-                </span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:text-brand-500" />
-              </div>
-              <p className="mt-2 flex items-center gap-0.5 text-xl font-extrabold tracking-tight text-ink">
-                {k.rupee && <IndianRupee className="h-4 w-4 stroke-[2.5]" />}
-                {k.value}
-              </p>
-              <p className="text-[11px] font-bold text-slate-500">{k.label}</p>
-            </button>
-          );
-        })}
+      {/* KPI cards grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        {kpis.map((k) => (
+          <StatCard
+            key={k.label}
+            title={k.label}
+            value={k.value}
+            icon={k.icon}
+            hint={k.hint}
+            iconBg={k.wrap}
+            iconColor={k.color}
+            prefix={k.rupee ? <IndianRupee className="h-4 w-4 stroke-[2.5]" /> : undefined}
+            onClick={() => navigate(k.to)}
+          />
+        ))}
       </div>
 
       {/* Monthly bookings + Recently booked */}
