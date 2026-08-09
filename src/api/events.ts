@@ -36,6 +36,8 @@ export interface EventCreatePayload {
   is_free?: boolean;
   is_recurring?: boolean;
   recurrence_rule?: string;
+  schedule_type?: 'one_time' | 'recurring' | 'custom_dates';
+  custom_dates?: string[];
   cancellation_policy?: string;
   meeting_link?: string;
   google_maps_url?: string;
@@ -120,6 +122,8 @@ export interface EventDetail {
   is_free: boolean;
   is_recurring: boolean;
   recurrence_rule: string | null;
+  schedule_type?: string;
+  custom_dates?: string[] | null;
   cancellation_policy: string | null;
   price_tiers: { id: string; name: string; price_cents: number }[] | null;
   requires_attendee_details: boolean;
