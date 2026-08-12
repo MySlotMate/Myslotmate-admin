@@ -12,6 +12,25 @@ export interface PriceTierInput {
   sort_order?: number;
 }
 
+/**
+ * A group experience takes many guests per session; a one-on-one experience is
+ * a calendar of single-seat slots (capacity 1). Dated windows are expanded into
+ * custom_dates; weekly windows repeat and are generated server-side.
+ */
+export type SessionType = 'group' | 'one_on_one';
+
+/** One availability window, in IST wall-clock. Dated OR weekly, never both. */
+export interface ApiSessionWindow {
+  /** "YYYY-MM-DD" — dated windows only. */
+  date: string;
+  /** "HH:mm" */
+  start: string;
+  /** "HH:mm" */
+  end: string;
+  /** 0 = Sunday … 6 = Saturday — weekly windows only. */
+  weekday?: number;
+}
+
 export interface EventCreatePayload {
   host_id: string;
   title: string;
@@ -38,6 +57,9 @@ export interface EventCreatePayload {
   recurrence_rule?: string;
   schedule_type?: 'one_time' | 'recurring' | 'custom_dates';
   custom_dates?: string[];
+  session_type?: SessionType;
+  break_minutes?: number;
+  session_windows?: ApiSessionWindow[];
   cancellation_policy?: string;
   meeting_link?: string;
   google_maps_url?: string;
@@ -124,6 +146,9 @@ export interface EventDetail {
   recurrence_rule: string | null;
   schedule_type?: string;
   custom_dates?: string[] | null;
+  session_type?: SessionType;
+  break_minutes?: number;
+  session_windows?: ApiSessionWindow[] | null;
   cancellation_policy: string | null;
   price_tiers: { id: string; name: string; price_cents: number }[] | null;
   requires_attendee_details: boolean;

@@ -23,6 +23,14 @@ import {
   FiSearch,
 } from 'react-icons/fi';
 import { RichTextEditor } from '../../components/RichTextEditor';
+import SessionWindowsEditor from '../../components/SessionWindowsEditor';
+import {
+  generateSessionSlots,
+  generateWeeklySessions,
+  nextWeeklySession,
+  slotsToCustomDates,
+  type SessionWindow,
+} from '../../lib/sessionSlots';
 import { ImageCropModal } from '../../components/ImageCropModal';
 import { LocationSearchInput } from '../../components/LocationSearchInput';
 import { ToastHost } from '../../components/Toast';
@@ -82,6 +90,13 @@ interface FormData {
   recurrenceRule: string;
   scheduleType: 'one_time' | 'recurring' | 'custom_dates';
   customDatesList: { date: string; time: string }[];
+  // One-on-one: availability windows expanded into single-seat sessions.
+  // Weekly windows repeat and are generated server-side; dated ones are
+  // expanded here into custom_dates.
+  sessionType: 'group' | 'one_on_one';
+  sessionWindows: SessionWindow[];
+  breakMinutes: number;
+  sessionIsWeekly: boolean;
   cancellationPolicy: string;
   termsAndConditions: string;
   // Attendee details
@@ -845,6 +860,10 @@ export const CreateExperience: React.FC = () => {
     recurrenceRule: '',
     scheduleType: 'one_time',
     customDatesList: [{ date: '', time: '' }],
+    sessionType: 'group',
+    sessionWindows: [{ date: '', start: '', end: '' }],
+    breakMinutes: 0,
+    sessionIsWeekly: true,
     cancellationPolicy: 'flexible',
     termsAndConditions: '',
     requiresAttendeeDetails: false,
@@ -1011,6 +1030,21 @@ export const CreateExperience: React.FC = () => {
           recurrenceRule: ev.recurrence_rule ?? '',
           scheduleType: computedScheduleType,
           customDatesList: parsedCustomSlots.length > 0 ? parsedCustomSlots : [{ date: dt.date, time: dt.time }],
+          sessionType: ev.session_type === 'one_on_one' ? 'one_on_one' : 'group',
+          // The stored windows decide the mode — weekly ones carry a weekday.
+          sessionWindows:
+            ev.session_windows && ev.session_windows.length > 0
+              ? ev.session_windows.map((w) => ({
+                  date: w.date,
+                  start: w.start,
+                  end: w.end,
+                  weekday: w.weekday ?? undefined,
+                }))
+              : [{ date: '', start: '', end: '' }],
+          breakMinutes: ev.break_minutes ?? 0,
+          sessionIsWeekly: (ev.session_windows ?? []).some(
+            (w) => w.weekday !== undefined && w.weekday !== null,
+          ),
           cancellationPolicy: ev.cancellation_policy ?? 'flexible',
           termsAndConditions: ev.terms_and_conditions ?? '',
           requiresAttendeeDetails: ev.requires_attendee_details,
@@ -1208,7 +1242,35 @@ export const CreateExperience: React.FC = () => {
   };
 
   const validateStep2 = (): boolean => {
-    if (form.scheduleType === 'custom_dates') {
+    if (form.sessionType === 'one_on_one') {
+      const { errors, count } = form.sessionIsWeekly
+        ? (() => {
+            const r = generateWeeklySessions(
+              form.sessionWindows,
+              form.durationMinutes,
+              form.breakMinutes,
+            );
+            return { errors: r.errors, count: r.perWeek };
+          })()
+        : (() => {
+            const r = generateSessionSlots(
+              form.sessionWindows,
+              form.durationMinutes,
+              form.breakMinutes,
+            );
+            return { errors: r.errors, count: r.slots.length };
+          })();
+      if (errors.length > 0) {
+        setShowErrors(true);
+        toast.error(errors[0]);
+        return false;
+      }
+      if (count === 0) {
+        setShowErrors(true);
+        toast.error("Your availability windows don't fit a single session");
+        return false;
+      }
+    } else if (form.scheduleType === 'custom_dates') {
       const valid = form.customDatesList.filter((s) => s.date && s.time);
       if (valid.length === 0) {
         setShowErrors(true);
@@ -1315,7 +1377,34 @@ export const CreateExperience: React.FC = () => {
       // Construct datetime — drafts may be missing date/time, so fall back to now.
       // Entered date/time are India-local (IST); anchor them to +05:30 so the
       // stored UTC instant doesn't drift with the admin's browser timezone.
-      const firstSlot = form.scheduleType === 'custom_dates' && form.customDatesList[0]?.date && form.customDatesList[0]?.time
+      // Dated one-on-one: expand the windows into the sessions that become
+      // custom_dates. Weekly one-on-one sends no dates — the server regenerates
+      // them from the windows on read — but still needs a real upcoming session
+      // as the event's anchor time.
+      const isWeeklyOneOnOne =
+        form.sessionType === 'one_on_one' && form.sessionIsWeekly;
+      const oneOnOneSlots =
+        form.sessionType === 'one_on_one' && !form.sessionIsWeekly
+          ? generateSessionSlots(
+              form.sessionWindows,
+              form.durationMinutes,
+              form.breakMinutes,
+            ).slots
+          : [];
+      const weeklyAnchor = isWeeklyOneOnOne
+        ? nextWeeklySession(
+            form.sessionWindows,
+            form.durationMinutes,
+            form.breakMinutes,
+          )
+        : null;
+
+      const firstSlot = form.sessionType === 'one_on_one'
+        ? {
+            date: (isWeeklyOneOnOne ? weeklyAnchor?.date : oneOnOneSlots[0]?.date) ?? '',
+            time: (isWeeklyOneOnOne ? weeklyAnchor?.time : oneOnOneSlots[0]?.time) ?? '',
+          }
+        : form.scheduleType === 'custom_dates' && form.customDatesList[0]?.date && form.customDatesList[0]?.time
         ? form.customDatesList[0]
         : { date: form.eventDate, time: form.eventTime };
 
@@ -1324,7 +1413,14 @@ export const CreateExperience: React.FC = () => {
         ? new Date(istInputToUTCISO(firstSlot.date, firstSlot.time))
         : new Date();
       let endDateTime: Date;
-      if (form.endTime && firstSlot.date) {
+      if (form.sessionType === 'one_on_one') {
+        // Spans ONE session: consumers derive a per-slot duration from
+        // (end_time - time), so stretching it across the day would make every
+        // slot look hours long.
+        endDateTime = new Date(
+          eventDateTime.getTime() + (form.durationMinutes || 60) * 60 * 1000
+        );
+      } else if (form.endTime && firstSlot.date) {
         endDateTime = new Date(istInputToUTCISO(firstSlot.date, form.endTime));
       } else {
         endDateTime = new Date(
@@ -1348,9 +1444,11 @@ export const CreateExperience: React.FC = () => {
         meeting_link: form.isOnline ? form.meetingLink || undefined : undefined,
         google_maps_url: !form.isOnline ? form.googleMapsUrl || undefined : undefined,
         duration_minutes: form.durationMinutes,
-        capacity: form.maxGroupSize,
-        min_group_size: form.minGroupSize,
-        max_group_size: form.maxGroupSize,
+        // A one-on-one slot seats exactly one guest — that single seat is what
+        // stops a second booking landing on the same session.
+        capacity: form.sessionType === 'one_on_one' ? 1 : form.maxGroupSize,
+        min_group_size: form.sessionType === 'one_on_one' ? 1 : form.minGroupSize,
+        max_group_size: form.sessionType === 'one_on_one' ? 1 : form.maxGroupSize,
         languages: form.languages,
         level: form.level || undefined,
         price_cents: form.isFree || form.useTiers ? 0 : form.priceCents,
@@ -1364,14 +1462,27 @@ export const CreateExperience: React.FC = () => {
                   price_cents: Math.round(Number(t.priceStr) * 100),
                 }))
             : undefined,
-        schedule_type: form.scheduleType,
-        custom_dates: form.scheduleType === 'custom_dates'
+        schedule_type: isWeeklyOneOnOne ? ('recurring' as const) : form.scheduleType,
+        custom_dates: isWeeklyOneOnOne
+          ? []
+          : form.sessionType === 'one_on_one'
+          ? slotsToCustomDates(oneOnOneSlots)
+          : form.scheduleType === 'custom_dates'
           ? form.customDatesList
               .filter((s) => s.date && s.time)
               .map((s) => istInputToUTCISO(s.date, s.time))
           : undefined,
-        is_recurring: form.scheduleType === 'recurring',
-        recurrence_rule: form.scheduleType === 'recurring' ? form.recurrenceRule : undefined,
+        session_type: form.sessionType,
+        break_minutes: form.sessionType === 'one_on_one' ? form.breakMinutes : undefined,
+        session_windows:
+          form.sessionType === 'one_on_one' ? form.sessionWindows : undefined,
+        is_recurring: isWeeklyOneOnOne || form.scheduleType === 'recurring',
+        // The weekdays live in the windows, so the rule only says "weekly".
+        recurrence_rule: isWeeklyOneOnOne
+          ? 'FREQ=WEEKLY'
+          : form.scheduleType === 'recurring'
+          ? form.recurrenceRule
+          : undefined,
         cancellation_policy: form.cancellationPolicy,
         terms_and_conditions: form.termsAndConditions.trim() || undefined,
         requires_attendee_details: form.requiresAttendeeDetails,
@@ -2204,15 +2315,16 @@ export const CreateExperience: React.FC = () => {
                 </h3>
 
                 {/* Schedule Type Selection Tabs */}
-                <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <button
                     type="button"
                     onClick={() => {
                       updateForm('scheduleType', 'one_time');
                       updateForm('isRecurring', false);
+                      updateForm('sessionType', 'group');
                     }}
-                    className={`flex-1 rounded-xl border p-3.5 text-left transition ${
-                      form.scheduleType === 'one_time'
+                    className={`rounded-xl border p-3.5 text-left transition ${
+                      form.sessionType === 'group' && form.scheduleType === 'one_time'
                         ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
                         : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                     }`}
@@ -2225,9 +2337,10 @@ export const CreateExperience: React.FC = () => {
                     onClick={() => {
                       updateForm('scheduleType', 'recurring');
                       updateForm('isRecurring', true);
+                      updateForm('sessionType', 'group');
                     }}
-                    className={`flex-1 rounded-xl border p-3.5 text-left transition ${
-                      form.scheduleType === 'recurring'
+                    className={`rounded-xl border p-3.5 text-left transition ${
+                      form.sessionType === 'group' && form.scheduleType === 'recurring'
                         ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
                         : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                     }`}
@@ -2240,9 +2353,10 @@ export const CreateExperience: React.FC = () => {
                     onClick={() => {
                       updateForm('scheduleType', 'custom_dates');
                       updateForm('isRecurring', false);
+                      updateForm('sessionType', 'group');
                     }}
-                    className={`flex-1 rounded-xl border p-3.5 text-left transition ${
-                      form.scheduleType === 'custom_dates'
+                    className={`rounded-xl border p-3.5 text-left transition ${
+                      form.sessionType === 'group' && form.scheduleType === 'custom_dates'
                         ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
                         : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                     }`}
@@ -2250,10 +2364,30 @@ export const CreateExperience: React.FC = () => {
                     <div className="font-medium text-sm">Custom Dates (X, Y, Z)</div>
                     <div className="text-xs text-gray-500 mt-0.5">Pick dynamic dates (e.g. Aug 15, 22, Sept 5)</div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // One-on-one slots come from the host's availability
+                      // windows: weekly ones repeat, dated ones expand into
+                      // custom_dates. The mode is picked inside the editor.
+                      updateForm('sessionType', 'one_on_one');
+                      updateForm('scheduleType', 'custom_dates');
+                      updateForm('isRecurring', false);
+                    }}
+                    className={`rounded-xl border p-3.5 text-left transition ${
+                      form.sessionType === 'one_on_one'
+                        ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">One-on-One</div>
+                    <div className="text-xs text-gray-500 mt-0.5">Set the hours, we split them into 1:1 slots</div>
+                  </button>
                 </div>
 
                 {/* Standard One-Time & Recurring Inputs */}
-                {(form.scheduleType === 'one_time' || form.scheduleType === 'recurring') && (
+                {form.sessionType === 'group' &&
+                  (form.scheduleType === 'one_time' || form.scheduleType === 'recurring') && (
                   <>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
@@ -2326,7 +2460,7 @@ export const CreateExperience: React.FC = () => {
                 )}
 
                 {/* Dynamic Custom Selected Dates (X, Y, Z) Inputs */}
-                {form.scheduleType === 'custom_dates' && (
+                {form.sessionType === 'group' && form.scheduleType === 'custom_dates' && (
                   <div className="space-y-4 rounded-xl border border-[#0094CA]/30 bg-[#0094CA]/5 p-5">
                     <div>
                       <h4 className="font-semibold text-gray-900 text-sm">Selected Specific Dates & Times</h4>
@@ -2377,6 +2511,19 @@ export const CreateExperience: React.FC = () => {
                       + Add Another Date (X, Y, Z)
                     </button>
                   </div>
+                )}
+
+                {form.sessionType === 'one_on_one' && (
+                  <SessionWindowsEditor
+                    windows={form.sessionWindows}
+                    onWindowsChange={(windows) => updateForm('sessionWindows', windows)}
+                    breakMinutes={form.breakMinutes}
+                    onBreakMinutesChange={(minutes) => updateForm('breakMinutes', minutes)}
+                    durationMinutes={form.durationMinutes}
+                    isWeekly={form.sessionIsWeekly}
+                    onIsWeeklyChange={(weekly) => updateForm('sessionIsWeekly', weekly)}
+                    showErrors={showErrors}
+                  />
                 )}
               </div>
 
