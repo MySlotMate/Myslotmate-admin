@@ -19,6 +19,9 @@ export interface PriceTierInput {
  */
 export type SessionType = 'group' | 'one_on_one';
 
+/** How a private event gates booking: a typed passkey, or an approved request. */
+export type PrivateAccessMode = 'passkey' | 'rsvp';
+
 /** One availability window, in IST wall-clock. Dated OR weekly, never both. */
 export interface ApiSessionWindow {
   /** "YYYY-MM-DD" — dated windows only. */
@@ -60,6 +63,7 @@ export interface EventCreatePayload {
   session_type?: SessionType;
   break_minutes?: number;
   session_windows?: ApiSessionWindow[];
+  private_access_mode?: PrivateAccessMode;
   cancellation_policy?: string;
   meeting_link?: string;
   google_maps_url?: string;
@@ -149,6 +153,7 @@ export interface EventDetail {
   session_type?: SessionType;
   break_minutes?: number;
   session_windows?: ApiSessionWindow[] | null;
+  private_access_mode?: PrivateAccessMode;
   cancellation_policy: string | null;
   price_tiers: { id: string; name: string; price_cents: number }[] | null;
   requires_attendee_details: boolean;

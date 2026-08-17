@@ -13,6 +13,7 @@ import { HostProfile } from './modules/hosts/HostProfile';
 import { ExperiencesList } from './modules/experiences/ExperiencesList';
 import { CreateExperience } from './modules/experiences/CreateExperience';
 import { BookingsDirectory } from './modules/bookings/BookingsDirectory';
+import { JoinRequestsDirectory } from './modules/requests/JoinRequestsDirectory';
 import { PaymentsDirectory } from './modules/payments/PaymentsDirectory';
 import { CitiesDirectory } from './modules/cities/CitiesDirectory';
 import { ReviewsDirectory } from './modules/reviews/ReviewsDirectory';
@@ -80,6 +81,7 @@ const AppContent: React.FC = () => {
                 <Route path="/experiences/new" element={<CreateExperience />} />
                 <Route path="/experiences/:id/edit" element={<CreateExperience />} />
                 <Route path="/bookings" element={<BookingsDirectory searchQuery={globalSearch} />} />
+                <Route path="/join-requests" element={<JoinRequestsDirectory />} />
                 <Route path="/payments" element={<PaymentsDirectory />} />
                 <Route path="/cities" element={<CitiesDirectory />} />
                 <Route path="/reviews" element={<ReviewsDirectory />} />

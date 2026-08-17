@@ -104,6 +104,7 @@ interface FormData {
   attendeeFields: string[];
   // Privacy & access
   isPrivate: boolean;
+  privateAccessMode: 'passkey' | 'rsvp';
   accessMode: 'shared' | 'unique';
   accessPasskey: string;
   passkeyGrantsFree: boolean;
@@ -869,6 +870,7 @@ export const CreateExperience: React.FC = () => {
     requiresAttendeeDetails: false,
     attendeeFields: [],
     isPrivate: false,
+    privateAccessMode: 'passkey',
     accessMode: 'shared',
     accessPasskey: '',
     passkeyGrantsFree: false,
@@ -1050,6 +1052,7 @@ export const CreateExperience: React.FC = () => {
           requiresAttendeeDetails: ev.requires_attendee_details,
           attendeeFields: ev.attendee_fields ?? [],
           isPrivate: ev.is_private,
+          privateAccessMode: ev.private_access_mode === 'rsvp' ? 'rsvp' : 'passkey',
           accessMode: accessPasskey ? 'shared' : ev.is_private ? 'unique' : 'shared',
           accessPasskey,
           passkeyGrantsFree: ev.passkey_grants_free,
@@ -1306,11 +1309,26 @@ export const CreateExperience: React.FC = () => {
     }
     if (
       form.isPrivate &&
+      form.privateAccessMode === 'passkey' &&
       form.accessMode === 'shared' &&
       !form.accessPasskey.trim()
     ) {
       setShowErrors(true);
       toast.error('A private experience needs a passkey');
+      return false;
+    }
+    // An RSVP host approves people on the strength of what they submit, so the
+    // request form can't be empty — without required fields every request would
+    // arrive as a bare name and there'd be nothing to judge.
+    if (
+      form.isPrivate &&
+      form.privateAccessMode === 'rsvp' &&
+      (!form.requiresAttendeeDetails || form.attendeeFields.length === 0)
+    ) {
+      setShowErrors(true);
+      toast.error(
+        'Request-to-join needs attendee details — turn them on and pick at least one field',
+      );
       return false;
     }
     return true;
@@ -1488,6 +1506,7 @@ export const CreateExperience: React.FC = () => {
         requires_attendee_details: form.requiresAttendeeDetails,
         attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
         is_private: form.isPrivate,
+        private_access_mode: form.privateAccessMode,
         // Shared mode sends the one passkey; unique mode clears it (access comes
         // from the per-guest access codes). A public event clears it server-side.
         access_passkey:
@@ -2691,6 +2710,60 @@ export const CreateExperience: React.FC = () => {
 
                 {form.isPrivate && (
                   <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    {/* Which gate: a code the guest types, or a request the host approves */}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          {
+                            key: 'passkey' as const,
+                            title: 'Unlock with a code',
+                            desc: 'Guests enter a passkey to book.',
+                          },
+                          {
+                            key: 'rsvp' as const,
+                            title: 'Request to join',
+                            desc: 'Guests apply with their details; the host approves.',
+                          },
+                        ]
+                      ).map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => updateForm('privateAccessMode', opt.key)}
+                          className={`rounded-lg border p-3 text-left transition ${
+                            form.privateAccessMode === opt.key
+                              ? 'border-[#0094CA] bg-[#0094CA]/5 ring-1 ring-[#0094CA]'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="block text-sm font-medium text-gray-800">
+                            {opt.title}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-gray-500">
+                            {opt.desc}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {form.privateAccessMode === 'rsvp' ? (
+                      <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
+                        <p className="text-sm text-gray-600">
+                          Guests see a <strong>Request to join</strong> button instead
+                          of a passkey prompt. They fill in the details configured in
+                          the Attendee details step, and requests appear in the host
+                          dashboard and in Join requests here.
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Approving unlocks booking — the guest still books and pays.
+                        </p>
+                        <p className="text-xs font-medium text-amber-700">
+                          Requires attendee details: turn them on and pick at least
+                          one field, or there&apos;s nothing to judge a request on.
+                        </p>
+                      </div>
+                    ) : (
+                    <>
                     {/* Access mode: one shared passkey vs a unique code per guest */}
                     <div className="grid gap-2 sm:grid-cols-2">
                       {(
@@ -2777,6 +2850,8 @@ export const CreateExperience: React.FC = () => {
                           </span>
                         )}
                       </p>
+                    )}
+                    </>
                     )}
 
                   </div>

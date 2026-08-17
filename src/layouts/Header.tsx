@@ -27,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
     '/hosts': 'Hosts',
     '/experiences': 'Experiences',
     '/bookings': 'Bookings',
+    '/join-requests': 'Join requests',
     '/payments': 'Payments',
     '/cities': 'Cities',
     '/reviews': 'Reviews',
