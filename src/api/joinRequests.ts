@@ -19,6 +19,8 @@ export interface JoinRequest {
   id: string;
   event_id: string;
   user_id: string;
+  /** The session this request is for — approval is per slot, not per event. */
+  occurrence_date: string;
   status: JoinRequestStatus;
   message?: string;
   /** The attendee answers as submitted, for the review screen. */

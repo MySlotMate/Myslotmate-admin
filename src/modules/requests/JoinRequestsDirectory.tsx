@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, X, Inbox, Loader2 } from 'lucide-react';
+import { Check, X, Inbox, Loader2, CalendarDays } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -106,8 +106,9 @@ export function JoinRequestsDirectory() {
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Join requests</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Guests applying to request-only private experiences. Approving lets
-          them book — it doesn&apos;t hold a spot or take payment.
+          Guests applying to request-only private experiences. Each request is
+          for one session — approving lets them book that date only, and
+          doesn&apos;t hold a spot or take payment.
         </p>
       </div>
 
@@ -166,6 +167,24 @@ export function JoinRequestsDirectory() {
                         <p className="mt-1 text-sm text-slate-600">
                           {req.event_title}
                         </p>
+                        {/* The session being asked about — approval covers this
+                            date only, so it belongs on the decision card. */}
+                        {req.occurrence_date && (
+                          <p className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-[#0094CA]/5 px-2 py-1 text-xs font-semibold text-slate-800">
+                            <CalendarDays className="h-3 w-3 text-[#0094CA]" />
+                            {new Date(req.occurrence_date).toLocaleString(
+                              'en-IN',
+                              {
+                                timeZone: 'Asia/Kolkata',
+                                weekday: 'short',
+                                day: 'numeric',
+                                month: 'short',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              },
+                            )}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <Badge color={statusColor(req.status)}>
