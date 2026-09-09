@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MockDataProvider } from './context/MockDataContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Layout } from './layouts/Layout';
+import { ToastHost } from './components/Toast';
 
 // Modules import
 import { Login } from './modules/auth/Login';
@@ -108,6 +109,9 @@ function App() {
         <HashRouter>
           <AppContent />
         </HashRouter>
+        {/* Single toast outlet for the whole app — toast.* is a module-level
+            store, so without one mounted here the calls render nowhere. */}
+        <ToastHost />
       </MockDataProvider>
     </AuthProvider>
   );

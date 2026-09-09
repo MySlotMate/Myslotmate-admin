@@ -48,6 +48,19 @@ export function fetchUsers(q: UserQuery): Promise<Paginated<User>> {
   return apiFetch<Paginated<User>>(`/admin/directory/users?${qs}`);
 }
 
+// NewUser is the payload for onboarding someone who has never logged in — used
+// by Create host when the person has no account yet. They sign in afterwards
+// with phone + OTP, which resolves to the row this creates.
+export interface NewUser {
+  name: string;
+  phn_number: string;
+  email?: string;
+}
+
+export function createUser(body: NewUser): Promise<{ id: string; name: string; email: string }> {
+  return apiFetch('/admin/users', { method: 'POST', body });
+}
+
 export function fetchHosts(q: HostQuery): Promise<Paginated<Host>> {
   const qs = buildParams({
     page: q.page,

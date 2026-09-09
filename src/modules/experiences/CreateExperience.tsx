@@ -33,7 +33,6 @@ import {
 } from '../../lib/sessionSlots';
 import { ImageCropModal } from '../../components/ImageCropModal';
 import { LocationSearchInput } from '../../components/LocationSearchInput';
-import { ToastHost } from '../../components/Toast';
 import { toast } from '../../lib/toast';
 import { useDragDrop } from '../../hooks/useDragDrop';
 import { istInputToUTCISO, utcToISTInputs } from '../../lib/datetime';
@@ -2939,7 +2938,6 @@ export const CreateExperience: React.FC = () => {
         onConfirm={handleCropConfirm}
       />
 
-      <ToastHost />
     </>
   );
 };

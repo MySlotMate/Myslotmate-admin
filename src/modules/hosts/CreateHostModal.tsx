@@ -3,7 +3,7 @@ import { Loader2, Check, Search } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { createHost } from '../../api/hosts';
-import { fetchUsers } from '../../api/directory';
+import { createUser, fetchUsers } from '../../api/directory';
 import type { User } from '../../types';
 import { toast } from '../../lib/toast';
 
@@ -42,11 +42,15 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
   const [userSearch, setUserSearch] = useState('');
   const [userResults, setUserResults] = useState<User[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
+  // Inline "no account yet" path: create the user row, then keep going.
+  const [newUserPhone, setNewUserPhone] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [creatingUser, setCreatingUser] = useState(false);
 
   const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');
   const [experienceDesc, setExperienceDesc] = useState('');
-  const [category, setCategory] = useState('');
+  const [moods, setMoods] = useState<string[]>([]);
   const [isProfessional, setIsProfessional] = useState(false);
   const [description, setDescription] = useState('');
   const [instagram, setInstagram] = useState('');
@@ -60,10 +64,12 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
     setSelectedUser(null);
     setUserSearch('');
     setUserResults([]);
+    setNewUserPhone('');
+    setNewUserEmail('');
     setFullName('');
     setCity('');
     setExperienceDesc('');
-    setCategory('');
+    setMoods([]);
     setIsProfessional(false);
     setDescription('');
     setInstagram('');
@@ -109,11 +115,40 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
     setCity(cityOf(user));
   };
 
-  const toggleDay = (day: string) => {
-    setPreferredDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+  // No account yet: create the user from the name typed in the search box plus
+  // a phone number. Phone is the identity the OTP login resolves them by.
+  const handleCreateUser = async () => {
+    const name = query;
+    if (!name) {
+      toast.error('Type the person\u2019s name in the search box first.');
+      return;
+    }
+    if (newUserPhone.replace(/\D/g, '').length < 10) {
+      toast.error('Enter a 10-digit mobile number.');
+      return;
+    }
+    setCreatingUser(true);
+    try {
+      const created = await createUser({
+        name,
+        phn_number: newUserPhone.trim(),
+        email: newUserEmail.trim() || undefined,
+      });
+      pickUser({ ...created, city: '' } as User);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create user.');
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const toggle = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string) => {
+    setter((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
     );
   };
+  const toggleDay = toggle(setPreferredDays);
+  const toggleMood = toggle(setMoods);
 
   const handleClose = () => {
     if (saving) return;
@@ -127,7 +162,7 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
     if (!fullName.trim()) return 'Enter a full name.';
     if (!city.trim()) return 'Enter a city.';
     if (!experienceDesc.trim()) return 'Describe the experiences this host will run.';
-    if (!category) return 'Select a category.';
+    if (moods.length === 0) return 'Select at least one category.';
     if (preferredDays.length === 0) return 'Select at least one preferred day.';
     if (!instagram.trim() && !linkedin.trim() && !website.trim()) {
       return 'Provide at least one social link.';
@@ -153,7 +188,7 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
         last_name: nameParts.slice(1).join(' '),
         city: city.trim(),
         experience_desc: experienceDesc.trim(),
-        moods: [category.toLowerCase()],
+        moods: moods.map((m) => m.toLowerCase()),
         description: description.trim(),
         preferred_days: preferredDays.map((d) => d.toLowerCase()),
         group_size: groupSize,
@@ -224,9 +259,24 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
                   ))}
                 </ul>
               )}
+              {showResults && !searchingUsers && userResults.length === 0 && (
+                <div className="mt-3 space-y-3 rounded-2xl border border-dashed border-brand-200 p-4">
+                  <p className="text-xs font-bold text-slate-500">
+                    No account for &ldquo;{query}&rdquo;. Create one &mdash; they sign in later
+                    with this phone number and an OTP. Add their email too if they may
+                    sign in with Google &mdash; that is what links the two.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <TextField label="Mobile number" value={newUserPhone} onChange={setNewUserPhone} disabled={creatingUser} placeholder="10-digit number" />
+                    <TextField label="Email (recommended)" value={newUserEmail} onChange={setNewUserEmail} disabled={creatingUser} placeholder="name@example.com" />
+                  </div>
+                  <Button variant="secondary" disabled={creatingUser} onClick={() => void handleCreateUser()}>
+                    {creatingUser ? 'Creating\u2026' : `Create user "${query}"`}
+                  </Button>
+                </div>
+              )}
               <p className="mt-2 text-xs font-medium text-slate-400">
-                Hosts are created for people who already have an account. If they're
-                already a host, creating another will fail.
+                If they&rsquo;re already a host, creating another will fail.
               </p>
             </>
           )}
@@ -245,28 +295,21 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
         <section>
           <SectionTitle>Experience details</SectionTitle>
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label="What experiences will they host?"
-                value={experienceDesc}
-                onChange={setExperienceDesc}
-                disabled={saving}
-                placeholder="Activities they plan to host"
-              />
-              <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
-                Category
-                <select
-                  className={inputClass}
-                  value={category}
-                  disabled={saving}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  <option value="">Select a category</option>
-                  {MOODS.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </label>
+            <TextField
+              label="What experiences will they host?"
+              value={experienceDesc}
+              onChange={setExperienceDesc}
+              disabled={saving}
+              placeholder="Activities they plan to host"
+            />
+
+            <div>
+              <p className="mb-2 text-xs font-bold text-slate-500">Categories</p>
+              <div className="flex flex-wrap gap-2">
+                {MOODS.map((m) => (
+                  <Chip key={m} label={m} selected={moods.includes(m)} disabled={saving} onClick={() => toggleMood(m)} />
+                ))}
+              </div>
             </div>
 
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-brand-100 p-4 transition hover:border-brand-200">
@@ -323,24 +366,9 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
             <div>
               <p className="mb-2 text-xs font-bold text-slate-500">Preferred days</p>
               <div className="flex flex-wrap gap-2">
-                {DAYS.map((day) => {
-                  const selected = preferredDays.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      disabled={saving}
-                      onClick={() => toggleDay(day)}
-                      className={`rounded-full border px-4 py-2 text-xs font-extrabold tracking-wide transition disabled:opacity-50 ${
-                        selected
-                          ? 'border-brand-500 bg-brand-500 text-white'
-                          : 'border-brand-100 bg-white text-slate-600 hover:border-brand-300'
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
+                {DAYS.map((day) => (
+                  <Chip key={day} label={day} selected={preferredDays.includes(day)} disabled={saving} onClick={() => toggleDay(day)} />
+                ))}
               </div>
             </div>
 
@@ -380,6 +408,26 @@ export const CreateHostModal: React.FC<Props> = ({ isOpen, onClose, onCreated })
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <h4 className="mb-3 text-xs font-extrabold uppercase tracking-wider text-brand-700">{children}</h4>
+);
+
+const Chip: React.FC<{
+  label: string;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}> = ({ label, selected, disabled, onClick }) => (
+  <button
+    type="button"
+    disabled={disabled}
+    onClick={onClick}
+    className={`rounded-full border px-4 py-2 text-xs font-extrabold tracking-wide transition disabled:opacity-50 ${
+      selected
+        ? 'border-brand-500 bg-brand-500 text-white'
+        : 'border-brand-100 bg-white text-slate-600 hover:border-brand-300'
+    }`}
+  >
+    {label}
+  </button>
 );
 
 const inputClass =
