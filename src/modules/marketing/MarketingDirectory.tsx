@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useMockData } from '../../context/MockDataContext';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { fetchEvents, fetchBookings, bulkNotifyEventGuests, type AdminEvent } from '../../api/directory';
+import { fetchEvents, fetchBookings, fetchUsers, bulkNotifyEventGuests, promoteEventToAllUsers, type AdminEvent } from '../../api/directory';
 import { fetchMarketingConfig, updateMarketingConfig, type HomepageMarketingConfig } from '../../api/marketing';
-import { Search, Star, LayoutGrid, X, Save, Check, Loader2, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
+import {
+  Search, Star, LayoutGrid, X, Save, Check, Loader2, GripVertical, ArrowUp, ArrowDown,
+  ChevronDown, ChevronUp, MapPin, Sparkles
+} from 'lucide-react';
 
 export const MarketingDirectory: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'homepage' | 'campaigns' | 'broadcasts'>('homepage');
@@ -14,6 +17,10 @@ export const MarketingDirectory: React.FC = () => {
   // Broadcast state
   const [selectedEventId, setSelectedEventId] = useState('');
   const [channel, setChannel] = useState<'both' | 'whatsapp' | 'email'>('both');
+  // 'guests' = people who already booked this event; 'all' = every registered
+  // user, optionally one city (a marketing blast, not a reminder).
+  const [audience, setAudience] = useState<'guests' | 'all'>('guests');
+  const [audienceCity, setAudienceCity] = useState('');
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [activeBookingsCount, setActiveBookingsCount] = useState<number | null>(null);
   const [countLoading, setCountLoading] = useState(false);
@@ -39,6 +46,13 @@ export const MarketingDirectory: React.FC = () => {
     setCountLoading(true);
     async function loadCount() {
       try {
+        if (audience === 'all') {
+          const usersRes = await fetchUsers({ page: 1, pageSize: 1, city: audienceCity.trim() || undefined });
+          if (alive) {
+            setActiveBookingsCount(usersRes.total);
+          }
+          return;
+        }
         const [confirmedRes, pendingRes] = await Promise.all([
           fetchBookings({ page: 1, pageSize: 1, status: 'confirmed', eventId: selectedEventId }),
           fetchBookings({ page: 1, pageSize: 1, status: 'pending', eventId: selectedEventId }),
@@ -61,7 +75,7 @@ export const MarketingDirectory: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [selectedEventId]);
+  }, [selectedEventId, audience, audienceCity]);
 
   const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,14 +83,24 @@ export const MarketingDirectory: React.FC = () => {
       alert('Please select an experience.');
       return;
     }
+    if (audience === 'all' && !broadcastMessage.trim()) {
+      alert('A marketing blast needs a message — the reminder template is only for booked guests.');
+      return;
+    }
     setBroadcastSending(true);
     setBroadcastError(null);
     setBroadcastSuccess(null);
     try {
-      const res = await bulkNotifyEventGuests(selectedEventId, {
-        message: broadcastMessage,
-        channel: channel,
-      });
+      const res = audience === 'all'
+        ? await promoteEventToAllUsers(selectedEventId, {
+            message: broadcastMessage,
+            channel: channel,
+            city: audienceCity.trim() || undefined,
+          })
+        : await bulkNotifyEventGuests(selectedEventId, {
+            message: broadcastMessage,
+            channel: channel,
+          });
       setBroadcastSuccess(res.message || `Successfully queued notifications to ${res.notified_count} users.`);
       setBroadcastMessage('');
     } catch (err) {
@@ -227,7 +251,8 @@ export const MarketingDirectory: React.FC = () => {
 
   const filteredEvents = allEvents.filter(e =>
     e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    e.hostName.toLowerCase().includes(searchQuery.toLowerCase()),
+    e.hostName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (e.city && e.city.toLowerCase().includes(searchQuery.toLowerCase())),
   );
 
   const handleLaunchCampaign = (e: React.FormEvent) => {
@@ -415,18 +440,33 @@ export const MarketingDirectory: React.FC = () => {
               {/* Left: searchable live events */}
               <Card className="flex flex-col p-4 h-full">
                 <div className="mb-3 flex items-center justify-between shrink-0">
-                  <h4 className="text-sm font-bold text-ink">Live experiences</h4>
-                  <span className="text-[11px] font-semibold text-slate-400">{filteredEvents.length} shown</span>
+                  <div>
+                    <h4 className="text-sm font-bold text-ink">Live experiences</h4>
+                    <p className="text-[11px] font-medium text-slate-400">Pin or unpin experiences for homepage sections</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
+                    {filteredEvents.length} / {allEvents.length}
+                  </span>
                 </div>
-                <div className="mb-3 flex items-center gap-2 rounded-xl border border-brand-100 bg-white px-3 py-2 shadow-sm shrink-0">
+                <div className="relative mb-3 flex items-center gap-2 rounded-2xl border border-brand-100 bg-white px-3.5 py-2.5 shadow-sm transition-all focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10 shrink-0">
                   <Search className="h-4 w-4 shrink-0 text-slate-400" />
                   <input
-                    className="w-full bg-transparent text-sm text-slate-700 outline-none"
-                    type="search"
-                    placeholder="Search by title or host…"
+                    className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                    type="text"
+                    placeholder="Search experiences by title, host, or city…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      title="Clear search"
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {eventsLoading ? (
@@ -435,7 +475,19 @@ export const MarketingDirectory: React.FC = () => {
                     <p className="mt-2 text-xs text-slate-400">Loading live events…</p>
                   </div>
                 ) : filteredEvents.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-slate-400">No live events match your search.</div>
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 space-y-2">
+                    <Search className="h-8 w-8 text-slate-300 stroke-[1.5]" />
+                    <p className="text-sm font-medium">No live events match "{searchQuery}"</p>
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                      >
+                        Clear search filter
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1">
                     {filteredEvents.map((event) => {
@@ -444,13 +496,24 @@ export const MarketingDirectory: React.FC = () => {
                       return (
                         <div
                           key={event.id}
-                          className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition ${
+                          className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition ${
                             isF || isC ? 'border-brand-200 bg-brand-50/30' : 'border-slate-100 hover:border-brand-200'
                           }`}
                         >
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-bold text-ink">{event.title}</p>
-                            <p className="truncate text-[11px] font-semibold text-slate-400">{event.hostName} · {event.city}</p>
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 mt-0.5">
+                              <span className="truncate">{event.hostName}</span>
+                              {event.city && (
+                                <>
+                                  <span>·</span>
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <MapPin className="h-2.5 w-2.5" />
+                                    {event.city}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                           <div className="flex shrink-0 gap-1.5">
                             <PinChip active={isF} onClick={() => toggleFeatured(event.id)} Icon={Star} label="Featured" activeClass="border-amber-200 bg-amber-50 text-amber-700" />
@@ -502,7 +565,7 @@ export const MarketingDirectory: React.FC = () => {
                 <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="campName">Campaign Name</label>
                 <input
                   id="campName"
-                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400"
+                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10"
                   type="text"
                   placeholder="e.g. Summer discounts Delhi"
                   value={newCampaignName}
@@ -513,23 +576,28 @@ export const MarketingDirectory: React.FC = () => {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="campChannel">Channel</label>
-                  <select
-                    id="campChannel"
-                    className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400"
-                    value={newCampaignChannel}
-                    onChange={(e) => setNewCampaignChannel(e.target.value)}
-                  >
-                    <option>Meta ads</option>
-                    <option>Email + push</option>
-                    <option>In-app banner</option>
-                    <option>Google search ads</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      id="campChannel"
+                      className="w-full appearance-none rounded-2xl border border-brand-100 bg-white px-4 py-3 pr-10 text-sm font-medium text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 cursor-pointer"
+                      value={newCampaignChannel}
+                      onChange={(e) => setNewCampaignChannel(e.target.value)}
+                    >
+                      <option value="Meta ads">Meta ads</option>
+                      <option value="Email + push">Email + push</option>
+                      <option value="In-app banner">In-app banner</option>
+                      <option value="Google search ads">Google search ads</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
+                      <ChevronDown className="h-4 w-4" />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="campSpend">Budget Spend</label>
                   <input
                     id="campSpend"
-                    className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400"
+                    className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10"
                     type="number"
                     placeholder="e.g. 5000"
                     value={newCampaignSpend}
@@ -551,40 +619,88 @@ export const MarketingDirectory: React.FC = () => {
           {/* Left: Broadcast Form */}
           <Card className="p-6">
             <h3 className="text-lg font-bold text-ink">Send Bulk Announcement</h3>
-            <p className="text-xs text-mist mt-1 mb-5">Broadcast reminders or custom updates to all active bookings of an experience.</p>
+            <p className="text-xs text-mist mt-1 mb-5">Send reminders to an experience's booked guests, or market it to every registered user.</p>
 
             <form onSubmit={handleSendBroadcast} className="space-y-5">
               <div>
-                <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="broadcastEvent">Select Experience</label>
-                <select
-                  id="broadcastEvent"
-                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
-                  value={selectedEventId}
-                  onChange={(e) => {
-                    setSelectedEventId(e.target.value);
+                <label className="mb-2 block text-xs font-bold text-slate-600">Audience</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { key: 'guests', label: 'Booked Guests', hint: 'Confirmed + pending bookings' },
+                    { key: 'all', label: 'All Users', hint: 'Everyone registered — marketing' },
+                  ] as const).map((a) => (
+                    <label
+                      key={a.key}
+                      className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border p-3.5 text-center transition hover:bg-slate-50 ${
+                        audience === a.key
+                          ? 'border-brand-600 bg-brand-50/20 text-brand-700 font-bold'
+                          : 'border-slate-100 bg-white text-slate-500 font-medium'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="broadcastAudience"
+                        value={a.key}
+                        checked={audience === a.key}
+                        onChange={() => {
+                          setAudience(a.key);
+                          setBroadcastSuccess(null);
+                          setBroadcastError(null);
+                        }}
+                        className="sr-only"
+                      />
+                      <span className="text-xs uppercase tracking-wider">{a.label}</span>
+                      <span className="mt-0.5 text-[10px] font-medium text-slate-400">{a.hint}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {audience === 'all' && (
+                  <div className="mt-3">
+                    <input
+                      className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10"
+                      placeholder="Limit to a city (optional, exact name e.g. Bengaluru)"
+                      value={audienceCity}
+                      onChange={(e) => setAudienceCity(e.target.value)}
+                    />
+                    <p className="mt-2 text-[10px] font-medium text-amber-600">
+                      Goes to every registered user — there is no marketing opt-out flag on accounts yet.
+                      WhatsApp is sent as the approved marketing template.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-600">Select Experience</label>
+                <SearchableEventSelect
+                  events={allEvents}
+                  selectedEventId={selectedEventId}
+                  onSelect={(id) => {
+                    setSelectedEventId(id);
                     setBroadcastSuccess(null);
                     setBroadcastError(null);
                   }}
-                >
-                  <option value="">Choose an experience...</option>
-                  {allEvents.map((ev) => (
-                    <option key={ev.id} value={ev.id}>{ev.title} ({ev.hostName})</option>
-                  ))}
-                </select>
+                  disabled={eventsLoading || broadcastSending}
+                />
 
                 {selectedEventId && (
                   <div className="mt-2.5 flex items-center gap-2">
                     {countLoading ? (
-                      <>
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
                         <Loader2 className="h-3 w-3 animate-spin text-brand-600" />
-                        <span className="text-[11px] font-medium text-slate-400">Loading guest count...</span>
-                      </>
+                        <span>{audience === 'all' ? 'Counting users...' : 'Calculating active bookings...'}</span>
+                      </div>
                     ) : activeBookingsCount !== null ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-700">
-                        {activeBookingsCount} active booking{activeBookingsCount !== 1 ? 's' : ''} targeted
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 border border-brand-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-700 shadow-xs">
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-600 animate-pulse" />
+                        {activeBookingsCount}{' '}
+                        {audience === 'all'
+                          ? `user${activeBookingsCount !== 1 ? 's' : ''} targeted`
+                          : `active booking${activeBookingsCount !== 1 ? 's' : ''} targeted`}
                       </span>
                     ) : (
-                      <span className="text-[11px] font-medium text-rose-500">Error loading booking count</span>
+                      <span className="text-[11px] font-medium text-rose-500">Error loading audience count</span>
                     )}
                   </div>
                 )}
@@ -621,16 +737,17 @@ export const MarketingDirectory: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-bold text-slate-600" htmlFor="broadcastMsg">
-                    Announcement Message <span className="font-normal text-slate-400">(Optional)</span>
+                    Announcement Message{' '}
+                    <span className="font-normal text-slate-400">{audience === 'all' ? '(Required)' : '(Optional)'}</span>
                   </label>
                   <span className="text-[10px] font-semibold text-slate-400">
-                    Leave blank to send standard reminder
+                    {audience === 'all' ? 'Marketing blasts need a message' : 'Leave blank to send standard reminder'}
                   </span>
                 </div>
                 <textarea
                   id="broadcastMsg"
                   rows={4}
-                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 resize-none"
+                  className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 resize-none"
                   placeholder="e.g. Please bring comfortable shoes as we'll be walking outdoors..."
                   value={broadcastMessage}
                   onChange={(e) => setBroadcastMessage(e.target.value)}
@@ -704,7 +821,13 @@ export const MarketingDirectory: React.FC = () => {
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">WhatsApp Copy</span>
                     <div className="rounded-2xl bg-[#DCF8C6] border border-[#d3ecd2] p-4 text-xs text-slate-800 shadow-sm max-w-sm ml-0">
                       <p className="whitespace-pre-line leading-relaxed">
-                        {broadcastMessage.trim() ? (
+                        {audience === 'all' ? (
+                          // Mirrors the approved `event_promo` template body. Keep in
+                          // sync with Meta — this preview cannot read the real template.
+                          `Hi [Name], something you might like is coming up on MySlotMate.\n\n*${
+                            allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience Title'
+                          }* is open for booking right now — spots are limited.\n\nTap below to see the details and grab yours.`
+                        ) : broadcastMessage.trim() ? (
                           broadcastMessage
                         ) : (
                           `Hey [Guest Name]! 🌟\n\nQuick reminder that you are booked for *${
@@ -716,7 +839,18 @@ export const MarketingDirectory: React.FC = () => {
                           }*.\n\nGet ready for an amazing experience!`
                         )}
                       </p>
+                      {audience === 'all' && (
+                        <div className="mt-3 border-t border-[#c5e0c0] pt-2 text-center text-[11px] font-bold text-[#0a7cff]">
+                          View experience
+                        </div>
+                      )}
                     </div>
+                    {audience === 'all' && (
+                      <p className="text-[10px] font-medium text-amber-600">
+                        Fixed copy from the approved <code>event_promo</code> template — only the name,
+                        event title and button link change. Your typed message goes out by email only.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -727,22 +861,40 @@ export const MarketingDirectory: React.FC = () => {
                       <div>
                         <span className="font-bold text-slate-400">Subject:</span>{' '}
                         <span className="font-semibold text-ink">
-                          {broadcastMessage.trim()
+                          {audience === 'all'
+                            ? `Happening soon: ${allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience'}`
+                            : broadcastMessage.trim()
                             ? `Announcement: ${allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience'}`
                             : `Reminder: ${allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience'}`}
                         </span>
                       </div>
                       <div className="border-t border-slate-100 pt-3 leading-relaxed whitespace-pre-line text-slate-600">
-                        <p className="font-bold text-ink">Hi [Guest Name],</p>
+                        {audience === 'all' && (
+                          <p className="text-sm font-bold text-ink">
+                            {allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience Title'}
+                          </p>
+                        )}
+                        <p className="font-bold text-ink">
+                          Hi {audience === 'all' ? '[Name]' : '[Guest Name]'},
+                        </p>
                         <p className="mt-2">
                           {broadcastMessage.trim() ? (
                             broadcastMessage
+                          ) : audience === 'all' ? (
+                            'Your marketing message appears here.'
                           ) : (
                             `This is a quick reminder that your upcoming experience *${
                               allEvents.find((e) => e.id === selectedEventId)?.title || 'Experience Title'
                             }* is scheduled soon.\n\nWe look forward to seeing you there!`
                           )}
                         </p>
+                        {audience === 'all' && (
+                          <p className="mt-3">
+                            <span className="inline-block rounded-lg bg-[#6d28d9] px-3 py-2 text-[11px] font-bold text-white">
+                              View experience
+                            </span>
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -750,6 +902,232 @@ export const MarketingDirectory: React.FC = () => {
               </div>
             )}
           </Card>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Searchable Event Select Combobox ──────────────────────────────────────────
+
+interface SearchableEventSelectProps {
+  events: AdminEvent[];
+  selectedEventId: string;
+  onSelect: (eventId: string) => void;
+  disabled?: boolean;
+}
+
+const SearchableEventSelect: React.FC<SearchableEventSelectProps> = ({
+  events,
+  selectedEventId,
+  onSelect,
+  disabled = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedEvent = events.find((e) => e.id === selectedEventId);
+
+  const filtered = events.filter((e) => {
+    const q = query.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      e.title.toLowerCase().includes(q) ||
+      e.hostName.toLowerCase().includes(q) ||
+      (e.city && e.city.toLowerCase().includes(q))
+    );
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+      setTimeout(() => searchInputRef.current?.focus(), 40);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Trigger Button */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen((prev) => !prev);
+            setQuery('');
+          }
+        }}
+        className={`w-full rounded-2xl border text-left transition-all duration-200 cursor-pointer flex items-center justify-between p-3.5 ${
+          isOpen
+            ? 'border-brand-500 bg-white ring-4 ring-brand-500/10 shadow-sm'
+            : selectedEvent
+            ? 'border-brand-200 bg-brand-50/25 hover:border-brand-300 hover:bg-brand-50/40'
+            : 'border-brand-100 bg-white hover:border-brand-300'
+        } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors ${
+              selectedEvent ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-400'
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+          </div>
+          {selectedEvent ? (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-ink leading-snug">{selectedEvent.title}</p>
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mt-0.5">
+                <span className="truncate">{selectedEvent.hostName}</span>
+                {selectedEvent.city && (
+                  <>
+                    <span className="text-slate-300">·</span>
+                    <span className="inline-flex items-center gap-0.5 text-slate-400 text-[11px]">
+                      <MapPin className="h-3 w-3" />
+                      {selectedEvent.city}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-medium text-slate-400">Search and select an experience…</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {selectedEvent && !disabled && (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Clear selection"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  onSelect('');
+                }
+              }}
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-200/80 hover:text-slate-600 transition"
+            >
+              <X className="h-4 w-4" />
+            </span>
+          )}
+          <div className="p-0.5 text-slate-400">
+            {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </div>
+        </div>
+      </button>
+
+      {/* Floating Popover Menu */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl border border-brand-100 bg-white p-2.5 shadow-xl backdrop-blur animate-in fade-in zoom-in-95 duration-150">
+          {/* Inner Search Box */}
+          <div className="relative mb-2 flex items-center rounded-xl border border-brand-100 bg-slate-50/80 px-3 py-2 transition focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/10">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="w-full bg-transparent px-2 text-sm text-slate-700 outline-none placeholder:text-slate-400"
+              placeholder="Filter by title, host, or city…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="rounded-md p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* List count info */}
+          <div className="px-2 py-1 flex items-center justify-between text-[11px] font-bold text-slate-400 border-b border-slate-100 pb-1.5 mb-1">
+            <span>Experiences</span>
+            <span>{filtered.length} of {events.length}</span>
+          </div>
+
+          {/* Options list */}
+          <div className="max-h-60 overflow-y-auto space-y-1 pr-1 overscroll-contain">
+            {filtered.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                <p>No experiences match "{query}"</p>
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="mt-1.5 text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            ) : (
+              filtered.map((ev) => {
+                const isSelected = ev.id === selectedEventId;
+                return (
+                  <button
+                    key={ev.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(ev.id);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2.5 rounded-xl px-3 py-2.5 text-left transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-brand-50 text-brand-900 font-bold border border-brand-200'
+                        : 'hover:bg-slate-50 text-slate-700 border border-transparent'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-ink">{ev.title}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mt-0.5">
+                        <span className="truncate">{ev.hostName}</span>
+                        {ev.city && (
+                          <>
+                            <span>·</span>
+                            <span className="inline-flex items-center gap-0.5">
+                              <MapPin className="h-2.5 w-2.5" />
+                              {ev.city}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white shadow-xs">
+                        <Check className="h-3 w-3" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>

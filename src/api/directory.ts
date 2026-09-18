@@ -253,6 +253,22 @@ export function sendBookingReminder(bookingId: string): Promise<{ message: strin
   });
 }
 
+// promoteEventToAllUsers markets an event to every registered user (optionally
+// one city), not just people who booked it. WhatsApp goes out as an approved
+// marketing template; email as custom HTML.
+export function promoteEventToAllUsers(
+  eventId: string,
+  body: { message: string; channel: string; city?: string }
+): Promise<{ message: string; notified_count: number }> {
+  return apiFetch<{ message: string; notified_count: number }>(
+    `/admin/directory/marketing/events/${eventId}/promote`,
+    {
+      method: 'POST',
+      body,
+    }
+  );
+}
+
 export function bulkNotifyEventGuests(
   eventId: string,
   body: { message: string; channel: string }
