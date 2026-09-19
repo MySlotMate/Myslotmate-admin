@@ -87,6 +87,15 @@ export const MarketingDirectory: React.FC = () => {
       alert('A marketing blast needs a message — the reminder template is only for booked guests.');
       return;
     }
+    if (audience === 'all') {
+      const scope = audienceCity.trim()
+        ? `in ${audienceCity.trim()}`
+        : 'EVERY registered user — no city filter';
+      const ok = window.confirm(
+        `Send this marketing blast to ${activeBookingsCount ?? '?'} users (${scope})?\n\nThis cannot be undone.`,
+      );
+      if (!ok) return;
+    }
     setBroadcastSending(true);
     setBroadcastError(null);
     setBroadcastSuccess(null);
@@ -101,7 +110,11 @@ export const MarketingDirectory: React.FC = () => {
             message: broadcastMessage,
             channel: channel,
           });
-      setBroadcastSuccess(res.message || `Successfully queued notifications to ${res.notified_count} users.`);
+      setBroadcastSuccess(
+        audience === 'all'
+          ? `Sent to ${res.notified_count} user${res.notified_count !== 1 ? 's' : ''}.`
+          : res.message || `Successfully queued notifications to ${res.notified_count} users.`,
+      );
       setBroadcastMessage('');
     } catch (err) {
       setBroadcastError(err instanceof Error ? err.message : 'Failed to send bulk notifications.');
