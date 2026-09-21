@@ -82,6 +82,13 @@ interface FormData {
   priceCents: number;
   useTiers: boolean;
   priceTiers: { name: string; priceStr: string }[];
+  // Monthly pass: one payment covers a month of sessions. Recurring, paid
+  // experiences only — nothing repeats on a one-time event, nothing is saved
+  // on a free one.
+  monthlyPassEnabled: boolean;
+  monthlyPassPriceStr: string;
+  monthlyPassSessionsStr: string; // '' = every session
+  monthlyPassCapacityStr: string; // '' = unlimited passes
   eventDate: string;
   eventTime: string;
   endTime: string;
@@ -853,6 +860,10 @@ export const CreateExperience: React.FC = () => {
     priceCents: 50000,
     useTiers: false,
     priceTiers: [{ name: '', priceStr: '' }],
+    monthlyPassEnabled: false,
+    monthlyPassPriceStr: '',
+    monthlyPassSessionsStr: '',
+    monthlyPassCapacityStr: '',
     eventDate: '',
     eventTime: '',
     endTime: '',
@@ -1024,6 +1035,12 @@ export const CreateExperience: React.FC = () => {
                 priceStr: (t.price_cents / 100).toString(),
               }))
             : [{ name: '', priceStr: '' }],
+          monthlyPassEnabled: !!ev.monthly_pass_price_cents,
+          monthlyPassPriceStr: ev.monthly_pass_price_cents
+            ? (ev.monthly_pass_price_cents / 100).toString()
+            : '',
+          monthlyPassSessionsStr: ev.monthly_pass_session_limit?.toString() ?? '',
+          monthlyPassCapacityStr: ev.monthly_pass_capacity?.toString() ?? '',
           eventDate: dt.date,
           eventTime: dt.time,
           endTime: endDt?.time ?? '',
@@ -1291,6 +1308,16 @@ export const CreateExperience: React.FC = () => {
         return false;
       }
     }
+    if (
+      form.monthlyPassEnabled &&
+      form.scheduleType !== 'one_time' &&
+      !form.isFree &&
+      Number(form.monthlyPassPriceStr) <= 0
+    ) {
+      setShowErrors(true);
+      toast.error('Please set a monthly pass price, or switch the pass off');
+      return false;
+    }
     if (!form.isFree && !form.useTiers && form.priceCents <= 0) {
       setShowErrors(true);
       toast.error('Please set a valid price');
@@ -1479,6 +1506,18 @@ export const CreateExperience: React.FC = () => {
                   price_cents: Math.round(Number(t.priceStr) * 100),
                 }))
             : undefined,
+        monthly_pass: {
+          price_cents:
+            form.monthlyPassEnabled && !form.isFree && form.scheduleType !== 'one_time'
+              ? Math.round(Number(form.monthlyPassPriceStr) * 100)
+              : 0,
+          session_limit: form.monthlyPassSessionsStr
+            ? Number(form.monthlyPassSessionsStr)
+            : undefined,
+          capacity: form.monthlyPassCapacityStr
+            ? Number(form.monthlyPassCapacityStr)
+            : undefined,
+        },
         schedule_type: isWeeklyOneOnOne ? ('recurring' as const) : form.scheduleType,
         custom_dates: isWeeklyOneOnOne
           ? []
@@ -2325,6 +2364,83 @@ export const CreateExperience: React.FC = () => {
                   </div>
                 )}
               </div>
+
+
+              {/* Monthly Pass — one payment covers a month of sessions. */}
+              {!form.isFree && (
+                <div className="space-y-4 border-t border-gray-100 pt-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Monthly Pass</h3>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Guests pay once and attend for 30 days. Recurring experiences only.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={form.scheduleType === 'one_time'}
+                      onClick={() => updateForm('monthlyPassEnabled', !form.monthlyPassEnabled)}
+                      className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-medium transition disabled:opacity-40 ${
+                        form.monthlyPassEnabled
+                          ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA]'
+                          : 'border-gray-200 bg-white text-gray-700'
+                      }`}
+                    >
+                      {form.monthlyPassEnabled ? 'On' : 'Off'}
+                    </button>
+                  </div>
+
+                  {form.scheduleType === 'one_time' && (
+                    <p className="text-xs text-gray-500">
+                      Pick a recurring or multi-date schedule below to offer a pass.
+                    </p>
+                  )}
+
+                  {form.monthlyPassEnabled && form.scheduleType !== 'one_time' && (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-700">
+                          Pass price (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.monthlyPassPriceStr}
+                          onChange={(e) => updateForm('monthlyPassPriceStr', e.target.value)}
+                          placeholder="2500"
+                          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-700">
+                          Sessions included
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.monthlyPassSessionsStr}
+                          onChange={(e) => updateForm('monthlyPassSessionsStr', e.target.value)}
+                          placeholder="All"
+                          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-700">
+                          Passes available
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.monthlyPassCapacityStr}
+                          onChange={(e) => updateForm('monthlyPassCapacityStr', e.target.value)}
+                          placeholder="Unlimited"
+                          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Availability Section */}
               <div className="space-y-4 border-t border-gray-100 pt-6">

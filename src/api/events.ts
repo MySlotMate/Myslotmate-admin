@@ -34,6 +34,15 @@ export interface ApiSessionWindow {
   weekday?: number;
 }
 
+/** Monthly pass settings. price_cents 0 switches the pass off. */
+export interface MonthlyPassInput {
+  price_cents: number;
+  /** Omit for "every session". */
+  session_limit?: number | null;
+  /** Omit for unlimited passes. */
+  capacity?: number | null;
+}
+
 export interface EventCreatePayload {
   host_id: string;
   title: string;
@@ -69,6 +78,7 @@ export interface EventCreatePayload {
   google_maps_url?: string;
   status?: 'draft' | 'live';
   price_tiers?: PriceTierInput[];
+  monthly_pass?: MonthlyPassInput;
   requires_attendee_details?: boolean;
   attendee_fields?: string[];
   terms_and_conditions?: string;
@@ -156,6 +166,9 @@ export interface EventDetail {
   private_access_mode?: PrivateAccessMode;
   cancellation_policy: string | null;
   price_tiers: { id: string; name: string; price_cents: number }[] | null;
+  monthly_pass_price_cents?: number | null;
+  monthly_pass_session_limit?: number | null;
+  monthly_pass_capacity?: number | null;
   requires_attendee_details: boolean;
   attendee_fields: string[] | null;
   terms_and_conditions: string | null;
