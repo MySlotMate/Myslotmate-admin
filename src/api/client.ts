@@ -15,6 +15,13 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+// Fired when a request comes back 401 and the stored token is dropped. The auth
+// context listens for it so the app falls back to the login screen there and
+// then — otherwise the session only looks dead on the next page load, and the
+// request after the one that expired goes out with no Authorization header at
+// all ("missing Authorization header").
+export const UNAUTHORIZED_EVENT = 'msm:unauthorized';
+
 export function setToken(token: string | null): void {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
@@ -98,8 +105,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   if (!response.ok) {
     const message = extractMessage(parsed) ?? response.statusText ?? 'Request failed';
     if (response.status === 401) {
-      // Stale/invalid token — drop it so the app falls back to login.
+      // Stale/invalid token — drop it and tell the app to show the login screen.
       setToken(null);
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
       throw new UnauthorizedError(message);
     }
     throw new ApiError(response.status, message);

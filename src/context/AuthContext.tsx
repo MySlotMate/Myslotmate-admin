@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { loginRequest, fetchCurrentAdmin } from '../api/auth';
 import type { AdminUser } from '../api/auth';
-import { getToken, setToken } from '../api/client';
+import { getToken, setToken, UNAUTHORIZED_EVENT } from '../api/client';
 
 interface AuthUser {
   name: string;
@@ -59,6 +59,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       active = false;
     };
+  }, []);
+
+  // Any 401 drops the token (see apiFetch). Clear the session here too, so the
+  // user lands on the login screen instead of firing further requests that
+  // carry no Authorization header.
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<void> => {
