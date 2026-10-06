@@ -18,7 +18,7 @@ interface ExperiencesListProps {
 
 const PAGE_SIZE = 10;
 
-const STATUS_OPTIONS = ['live', 'draft', 'paused', 'cancelled'];
+const STATUS_OPTIONS = ['live', 'draft', 'paused', 'expired', 'cancelled'];
 
 const statusColor = (status: string): 'green' | 'blue' | 'amber' | 'rose' | 'slate' => {
   switch (status) {
@@ -47,7 +47,7 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All statuses');
+  const [statusFilter, setStatusFilter] = useState('live');
   const [bookingEvent, setBookingEvent] = useState<AdminEvent | null>(null);
 
   // Effective search comes from the header global search or the local input.
