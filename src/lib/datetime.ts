@@ -31,3 +31,15 @@ export function utcToISTInputs(iso: string): { date: string; time: string } {
     time: `${hour}:${get('minute')}`,
   };
 }
+
+// Display a stored UTC instant as an IST date + time, e.g. "12 Oct 2026, 6:30 pm".
+export function formatISTDateTime(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(iso));
+}

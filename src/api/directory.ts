@@ -179,6 +179,7 @@ export interface AdminEvent {
   rating: number;
   status: string; // draft | live | paused | cancelled
   is_expired: boolean; // non-recurring event whose time has passed
+  date: string | null; // next date (upcoming occurrence if recurring), UTC ISO
 }
 
 export interface EventQuery {

@@ -9,6 +9,7 @@ import { Pagination } from '../../components/ui/Pagination';
 import { fetchEvents } from '../../api/directory';
 import type { AdminEvent } from '../../api/directory';
 import { deleteEvent, pauseEvent, resumeEvent } from '../../api/events';
+import { formatISTDateTime } from '../../lib/datetime';
 import { OnSpotBookingModal } from './OnSpotBookingModal';
 import { PauseExperienceModal } from './PauseExperienceModal';
 
@@ -215,13 +216,16 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
           <Button variant="secondary" className="mt-4" onClick={() => void loadEvents()}>Retry</Button>
         </Card>
       ) : events.length > 0 ? (
-        <Table headers={['Title', 'Host Name', 'City', 'Category', 'Price', 'Bookings', 'Status', 'Actions']}>
+        <Table headers={['Title', 'Host Name', 'City', 'Date', 'Price', 'Bookings', 'Status', 'Actions']}>
           {events.map((exp) => (
             <tr key={exp.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
               <td className="px-6 py-4 align-top font-bold text-ink max-w-[220px]">{exp.title}</td>
               <td className="px-6 py-4 align-top text-slate-700 font-medium">{exp.hostName}</td>
               <td className="px-6 py-4 align-top text-slate-600">{exp.city}</td>
-              <td className="px-6 py-4 align-top text-slate-600 capitalize">{exp.category}</td>
+              <td className="px-6 py-4 align-top text-slate-600 whitespace-nowrap">
+                {exp.date ? formatISTDateTime(exp.date) : '—'}
+                {exp.is_recurring && <div className="text-xs text-slate-400">Next · recurring</div>}
+              </td>
               <td className="px-6 py-4 align-top font-extrabold text-ink">
                 {exp.isFree ? (
                   <span className="text-emerald-600">Free</span>
