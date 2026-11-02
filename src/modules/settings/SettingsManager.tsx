@@ -7,6 +7,8 @@ import { Modal } from '../../components/ui/Modal';
 import {
   fetchAdminNotificationSettings,
   updateAdminNotificationSettings,
+  fetchBookingFee,
+  updateBookingFee,
   type AdminWhatsAppNumber,
 } from '../../api/settings';
 import { Phone, Plus, Trash2, Check, ShieldAlert, Loader2 } from 'lucide-react';
@@ -50,6 +52,38 @@ export const SettingsManager: React.FC = () => {
       alive = false;
     };
   }, []);
+
+  // Guest platform fee (real setting, saved to platform_settings.booking_fee)
+  const [feeInput, setFeeInput] = useState('');
+  const [feeSaving, setFeeSaving] = useState(false);
+  const [feeError, setFeeError] = useState<string | null>(null);
+  const [justSavedFee, setJustSavedFee] = useState(false);
+
+  useEffect(() => {
+    fetchBookingFee()
+      .then((cfg) => setFeeInput(String(cfg.amount_cents / 100)))
+      .catch(() => setFeeError('Could not load the current platform fee.'));
+  }, []);
+
+  const handleSaveFee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rupees = Number(feeInput);
+    if (!Number.isFinite(rupees) || rupees < 0 || rupees > 1000) {
+      setFeeError('Enter an amount from ₹0 to ₹1,000.');
+      return;
+    }
+    setFeeSaving(true);
+    setFeeError(null);
+    try {
+      await updateBookingFee({ amount_cents: Math.round(rupees * 100) });
+      setJustSavedFee(true);
+      setTimeout(() => setJustSavedFee(false), 2000);
+    } catch (err) {
+      setFeeError(err instanceof Error ? err.message : 'Failed to save the platform fee.');
+    } finally {
+      setFeeSaving(false);
+    }
+  };
 
   const handleSaveNotif = async (updatedList: AdminWhatsAppNumber[]) => {
     setNotifSaving(true);
@@ -265,6 +299,46 @@ export const SettingsManager: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </Card>
+
+        {/* Guest platform fee */}
+        <Card className="p-6 col-span-full">
+          <form onSubmit={handleSaveFee} className="flex flex-wrap items-end justify-between gap-4">
+            <div className="max-w-xl">
+              <h3 className="text-lg font-bold text-ink">Guest platform fee</h3>
+              <p className="text-xs text-mist mt-0.5">
+                Flat amount added once to every paid booking, on the website and the app. The platform keeps it
+                in full; host earnings are unaffected. Free bookings never pay it. At ₹0 the fee is off and not
+                shown to guests. Cancellations refund it.
+              </p>
+            </div>
+            <div className="flex items-end gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-slate-600" htmlFor="bookingFeeInput">
+                  Fee (₹ per booking)
+                </label>
+                <input
+                  id="bookingFeeInput"
+                  className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-ink outline-none transition focus:border-brand-400"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step={0.01}
+                  value={feeInput}
+                  onChange={(e) => setFeeInput(e.target.value)}
+                />
+              </div>
+              <Button variant="primary" type="submit" size="sm" disabled={feeSaving}>
+                {feeSaving ? 'Saving…' : 'Save fee'}
+              </Button>
+            </div>
+          </form>
+          {feeError && <p className="mt-3 text-xs font-semibold text-rose-600">{feeError}</p>}
+          {justSavedFee && (
+            <p className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+              <Check className="h-4 w-4" /> Fee saved
+            </p>
+          )}
         </Card>
 
         {/* Admin WhatsApp Alert Recipients */}
