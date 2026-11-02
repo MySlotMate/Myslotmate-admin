@@ -54,6 +54,7 @@ export const SettingsManager: React.FC = () => {
   }, []);
 
   // Guest platform fee (real setting, saved to platform_settings.booking_fee)
+  const [feeType, setFeeType] = useState<'flat' | 'percentage'>('flat');
   const [feeInput, setFeeInput] = useState('');
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
@@ -61,21 +62,29 @@ export const SettingsManager: React.FC = () => {
 
   useEffect(() => {
     fetchBookingFee()
-      .then((cfg) => setFeeInput(String(cfg.amount_cents / 100)))
+      .then((cfg) => {
+        setFeeType(cfg.type);
+        setFeeInput(String(cfg.type === 'percentage' ? cfg.percentage : cfg.amount_cents / 100));
+      })
       .catch(() => setFeeError('Could not load the current platform fee.'));
   }, []);
 
   const handleSaveFee = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rupees = Number(feeInput);
-    if (!Number.isFinite(rupees) || rupees < 0 || rupees > 1000) {
-      setFeeError('Enter an amount from ₹0 to ₹1,000.');
+    const n = Number(feeInput);
+    const isPct = feeType === 'percentage';
+    if (isPct ? !Number.isInteger(n) || n < 0 || n > 100 : !Number.isFinite(n) || n < 0 || n > 1000) {
+      setFeeError(isPct ? 'Enter a whole percentage from 0 to 100.' : 'Enter an amount from ₹0 to ₹1,000.');
       return;
     }
     setFeeSaving(true);
     setFeeError(null);
     try {
-      await updateBookingFee({ amount_cents: Math.round(rupees * 100) });
+      await updateBookingFee(
+        isPct
+          ? { type: 'percentage', percentage: n, amount_cents: 0 }
+          : { type: 'flat', amount_cents: Math.round(n * 100), percentage: 0 },
+      );
       setJustSavedFee(true);
       setTimeout(() => setJustSavedFee(false), 2000);
     } catch (err) {
@@ -307,23 +316,42 @@ export const SettingsManager: React.FC = () => {
             <div className="max-w-xl">
               <h3 className="text-lg font-bold text-ink">Guest platform fee</h3>
               <p className="text-xs text-mist mt-0.5">
-                Flat amount added once to every paid booking, on the website and the app. The platform keeps it
-                in full; host earnings are unaffected. Free bookings never pay it. At ₹0 the fee is off and not
-                shown to guests. Cancellations refund it.
+                Added once to every paid booking, on the website and the app — either a flat amount or a
+                percentage of the ticket total (rounded down to the paisa). The platform keeps it in full; host
+                earnings are unaffected. Free bookings never pay it. At 0 the fee is off and not shown to guests.
+                Cancellations refund it.
               </p>
             </div>
             <div className="flex items-end gap-3">
               <div>
+                <label className="mb-1 block text-[11px] font-bold text-slate-600" htmlFor="bookingFeeType">
+                  Type
+                </label>
+                <select
+                  id="bookingFeeType"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-ink outline-none transition focus:border-brand-400"
+                  value={feeType}
+                  onChange={(e) => {
+                    setFeeType(e.target.value as 'flat' | 'percentage');
+                    setFeeInput('0');
+                    setFeeError(null);
+                  }}
+                >
+                  <option value="flat">Flat (₹)</option>
+                  <option value="percentage">Percentage (%)</option>
+                </select>
+              </div>
+              <div>
                 <label className="mb-1 block text-[11px] font-bold text-slate-600" htmlFor="bookingFeeInput">
-                  Fee (₹ per booking)
+                  {feeType === 'percentage' ? 'Fee (% of tickets)' : 'Fee (₹ per booking)'}
                 </label>
                 <input
                   id="bookingFeeInput"
                   className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-ink outline-none transition focus:border-brand-400"
                   type="number"
                   min={0}
-                  max={1000}
-                  step={0.01}
+                  max={feeType === 'percentage' ? 100 : 1000}
+                  step={feeType === 'percentage' ? 1 : 0.01}
                   value={feeInput}
                   onChange={(e) => setFeeInput(e.target.value)}
                 />

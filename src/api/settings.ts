@@ -22,15 +22,22 @@ export async function fetchAdminNotificationSettings(): Promise<AdminNotificatio
   }
 }
 
-// The guest-paid platform fee: a flat amount (paise) added once to every paid
-// booking. 0 (the default) turns it off and hides it from the booking screens.
+// The guest-paid platform fee, added once to every paid booking: either a flat
+// amount (paise) or a percentage of the tickets. 0 (the default) turns it off
+// and hides it from the booking screens.
 export interface BookingFeeConfig {
+  type: 'flat' | 'percentage';
   amount_cents: number;
+  percentage: number;
 }
 
 export async function fetchBookingFee(): Promise<BookingFeeConfig> {
   const res = await apiFetch<Partial<BookingFeeConfig>>('/platform-settings/booking_fee');
-  return { amount_cents: res?.amount_cents ?? 0 };
+  return {
+    type: res?.type === 'percentage' ? 'percentage' : 'flat',
+    amount_cents: res?.amount_cents ?? 0,
+    percentage: res?.percentage ?? 0,
+  };
 }
 
 export function updateBookingFee(config: BookingFeeConfig): Promise<unknown> {
