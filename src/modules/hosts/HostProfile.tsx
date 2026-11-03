@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Table } from '../../components/ui/Table';
 import { fetchHostDetail, fetchHostEvents } from '../../api/directory';
 import type { HostDetail, HostEvent } from '../../api/directory';
-import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive, fetchHostEarnings } from '../../api/hosts';
+import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive, setHostAutoPayout, runHostAutoPayout, fetchHostEarnings } from '../../api/hosts';
 import type { PlatformFeeConfig, HostEarnings } from '../../api/hosts';
 import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
@@ -141,6 +141,39 @@ export const HostProfile: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to update host.');
     } finally {
       setTogglingActive(false);
+    }
+  };
+
+  const [togglingAutoPayout, setTogglingAutoPayout] = useState(false);
+  const handleToggleAutoPayout = async () => {
+    if (!hostId || !detail) return;
+    const enable = !detail.host.auto_payout_enabled;
+    if (enable && !window.confirm('Turn on auto payout? Every Tuesday this host\'s full withdrawable balance will be sent to their verified bank account.')) return;
+    setTogglingAutoPayout(true);
+    setError(null);
+    try {
+      await setHostAutoPayout(hostId, enable);
+      await loadDetail();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update auto payout.');
+    } finally {
+      setTogglingAutoPayout(false);
+    }
+  };
+
+  const [autoPayoutMsg, setAutoPayoutMsg] = useState<string | null>(null);
+  const handleRunAutoPayout = async () => {
+    if (!hostId) return;
+    if (!window.confirm('Pay this host\'s full withdrawable balance to their bank account now? This counts as their payout for this week, so Tuesday\'s run will skip them.')) return;
+    setTogglingAutoPayout(true);
+    setAutoPayoutMsg(null);
+    try {
+      const p = await runHostAutoPayout(hostId);
+      setAutoPayoutMsg(`Payout ₹${(p.amount_cents / 100).toLocaleString('en-IN')}: ${p.status}${p.last_error ? ` (${p.last_error})` : ''}`);
+    } catch (err) {
+      setAutoPayoutMsg(err instanceof Error ? err.message : 'Auto payout failed.');
+    } finally {
+      setTogglingAutoPayout(false);
     }
   };
 
@@ -310,6 +343,35 @@ export const HostProfile: React.FC = () => {
           </div>
         </div>
         {feeError && <p className="mt-3 text-sm font-semibold text-rose-600">{feeError}</p>}
+      </Card>
+
+      {/* Auto payout */}
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-700">Auto payout</h4>
+            <p className="mt-1 text-sm text-slate-500">
+              {host.auto_payout_enabled
+                ? 'On: every Tuesday (from 10:00 IST) the full withdrawable balance is paid to the host\'s verified bank account. Skipped if no verified bank account or the balance is under ₹100.'
+                : 'Off: the host withdraws manually.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {host.auto_payout_enabled && (
+              <Button variant="action" disabled={togglingAutoPayout} onClick={() => void handleRunAutoPayout()}>
+                Run now
+              </Button>
+            )}
+            <Button
+              variant={host.auto_payout_enabled ? 'secondary' : 'primary'}
+              disabled={togglingAutoPayout}
+              onClick={() => void handleToggleAutoPayout()}
+            >
+              {host.auto_payout_enabled ? 'Turn off' : 'Turn on'}
+            </Button>
+          </div>
+        </div>
+        {autoPayoutMsg && <p className="mt-3 text-sm font-semibold text-slate-700">{autoPayoutMsg}</p>}
       </Card>
 
       {/* Tabs */}

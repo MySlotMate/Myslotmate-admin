@@ -76,6 +76,23 @@ export function setHostPlatformFee(
   });
 }
 
+// setHostAutoPayout opts this host in or out of the weekly Tuesday auto payout
+// (full withdrawable balance to a verified bank account; skipped without one).
+export function setHostAutoPayout(hostId: string, enabled: boolean): Promise<unknown> {
+  return apiFetch(`/admin/hosts/${hostId}/auto-payout`, {
+    method: 'PUT',
+    body: { enabled },
+  });
+}
+
+// runHostAutoPayout pays this host's auto payout right now (counts as their
+// payout for this week). Errors carry the skip reason, e.g. no bank account.
+export function runHostAutoPayout(
+  hostId: string,
+): Promise<{ id: string; amount_cents: number; status: string; last_error?: string }> {
+  return apiFetch(`/admin/hosts/${hostId}/auto-payout/run`, { method: 'POST' });
+}
+
 export interface PlatformFeeConfig {
   host_percentage: number;
   platform_percentage: number;

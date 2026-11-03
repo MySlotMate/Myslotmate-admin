@@ -115,6 +115,8 @@ export interface HostRecord {
   // bookings (host keeps the remainder). null/undefined means the platform-
   // wide default split applies.
   platform_fee_percentage?: number | null;
+  // Weekly Tuesday auto payout to a verified bank account.
+  auto_payout_enabled?: boolean;
   created_at: string;
 }
 
