@@ -1,5 +1,5 @@
-// Comp coupons — host-issued codes that waive a booking to free (no partial
-// discounts in v1). Scoped to a single event (event_id) or all of a host's
+// Host coupons — access codes, free-booking codes, or percentage-discount codes.
+// Scoped to a single event (event_id) or all of a host's
 // events (event_id null). The backend accepts the acting host via host_id in the
 // body, matching the rest of the admin console.
 
@@ -12,6 +12,8 @@ export interface Coupon {
   code: string;
   // true = free-booking code (comp); false = access code (unlocks, guest pays).
   grants_free: boolean;
+  // Set (1–99) on a percentage-discount code; null otherwise.
+  discount_percent: number | null;
   max_redemptions: number | null;
   times_redeemed: number;
   per_user_limit: number | null;
@@ -28,6 +30,7 @@ export interface CouponPayload {
   code: string;
   // true = free-booking code (comp); false = access code. Defaults to true.
   grants_free?: boolean;
+  discount_percent?: number | null;
   max_redemptions?: number | null;
   per_user_limit?: number | null;
   valid_from?: string | null;
@@ -50,6 +53,7 @@ export interface CouponBatchPayload {
   prefix?: string;
   // true = free-booking codes (comp); false = access codes. Defaults to true.
   grants_free?: boolean;
+  discount_percent?: number | null;
   // Defaults to single-use (max_redemptions=1, per_user_limit=1).
   max_redemptions?: number | null;
   per_user_limit?: number | null;
@@ -77,7 +81,12 @@ export function deleteCoupon(couponId: string, hostId: string): Promise<unknown>
 export function verifyCoupon(
   eventId: string,
   code: string,
-): Promise<{ valid: boolean; comps_booking: boolean; code: string }> {
+): Promise<{
+    valid: boolean;
+    comps_booking: boolean;
+    discount_percent?: number | null;
+    code: string;
+  }> {
   return apiFetch('/coupons/validate', {
     method: 'POST',
     body: { event_id: eventId, code },

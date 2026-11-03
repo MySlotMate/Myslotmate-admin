@@ -2988,6 +2988,13 @@ export const CreateExperience: React.FC = () => {
                   kind="free"
                 />
               )}
+              {isEdit && editEventId && selectedHost?.id && !form.isFree && (
+                <CouponsManager
+                  eventId={editEventId}
+                  hostId={selectedHost.id}
+                  kind="discount"
+                />
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 border-t border-gray-100 pt-6">
