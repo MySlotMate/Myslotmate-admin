@@ -352,7 +352,7 @@ export const HostProfile: React.FC = () => {
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-700">Auto payout</h4>
             <p className="mt-1 text-sm text-slate-500">
               {host.auto_payout_enabled
-                ? 'On: every Tuesday (from 10:00 IST) the full withdrawable balance is paid to the host\'s verified bank account. Skipped if no verified bank account or the balance is under ₹100.'
+                ? 'On: every Tuesday (from 10:00 IST) the full withdrawable balance is paid to the host\'s verified bank account. Skipped if no verified bank account, the balance is under ₹100, or the host has co-hosts.'
                 : 'Off: the host withdraws manually.'}
             </p>
           </div>
