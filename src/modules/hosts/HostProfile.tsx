@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Table } from '../../components/ui/Table';
 import { fetchHostDetail, fetchHostEvents } from '../../api/directory';
 import type { HostDetail, HostEvent } from '../../api/directory';
-import { updateHostApplicationStatus, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive, setHostAutoPayout, runHostAutoPayout, fetchHostEarnings } from '../../api/hosts';
+import { updateHostApplicationStatus, updateHostProfile, setHostPlatformFee, fetchPlatformFeeConfig, setHostActive, setHostAutoPayout, runHostAutoPayout, fetchHostEarnings } from '../../api/hosts';
 import type { PlatformFeeConfig, HostEarnings } from '../../api/hosts';
 import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
@@ -121,6 +121,23 @@ export const HostProfile: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to update status.');
     } finally {
       setSavingStatus(false);
+    }
+  };
+
+  // Professional hosts may run 1:1 sessions as well as group events; community
+  // hosts run group events only. Only an admin sets this.
+  const [savingType, setSavingType] = useState(false);
+  const handleSetProfessional = async (professional: boolean) => {
+    if (!hostId || !detail || professional === !!detail.host.is_professional) return;
+    setSavingType(true);
+    setError(null);
+    try {
+      await updateHostProfile(hostId, { is_professional: professional });
+      await loadDetail();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update host type.');
+    } finally {
+      setSavingType(false);
     }
   };
 
@@ -296,6 +313,30 @@ export const HostProfile: React.FC = () => {
                 ))}
               </select>
             </label>
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+              Host type
+              <div className="flex rounded-xl border border-brand-100 bg-white p-0.5">
+                {([false, true] as const).map((pro) => {
+                  const on = !!host.is_professional === pro;
+                  return (
+                    <button
+                      key={String(pro)}
+                      type="button"
+                      disabled={savingType}
+                      onClick={() => void handleSetProfessional(pro)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
+                        on ? 'bg-brand-600 text-white' : 'text-slate-600 hover:text-brand-700'
+                      }`}
+                    >
+                      {pro ? 'Professional' : 'Community'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {host.is_professional ? 'Can run group events and 1:1 sessions' : 'Group events only, no 1:1 sessions'}
+            </p>
           </div>
         </div>
       </Card>
