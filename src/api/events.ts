@@ -239,6 +239,42 @@ export function pauseEvent(
   });
 }
 
+// cancelEvent cancels an experience for good. The backend refunds every
+// still-active booking (guest wallet credited, host earnings reversed); past
+// confirmed bookings are left as they are.
+export function cancelEvent(eventId: string, hostId: string): Promise<unknown> {
+  return apiFetch(`/events/${eventId}/cancel`, {
+    method: 'POST',
+    body: { host_id: hostId },
+  });
+}
+
+/** A booking on an experience, as the attendees endpoint returns it. */
+export interface EventAttendee {
+  id: string;
+  occurrence_date: string;
+  quantity: number;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'refunded';
+  amount_cents: number | null;
+  created_at: string;
+  user_name?: string;
+  user_email?: string;
+  user_phone?: string;
+  user_avatar_url?: string | null;
+  source?: 'online' | 'walk_in' | 'bulk_import';
+}
+
+// GET /events/{id}/attendees — every booking on the experience (admins skip
+// the ownership check). Pass an occurrence to narrow to one session.
+export async function fetchEventAttendees(
+  eventId: string,
+  occurrence?: string,
+): Promise<EventAttendee[]> {
+  const qs = occurrence ? `?date=${encodeURIComponent(occurrence)}` : '';
+  const res = await apiFetch<EventAttendee[] | null>(`/events/${eventId}/attendees${qs}`);
+  return res ?? [];
+}
+
 // resumeEvent clears every pause (full, from-session and single-session) and
 // puts the experience back live.
 export function resumeEvent(eventId: string, hostId: string): Promise<unknown> {

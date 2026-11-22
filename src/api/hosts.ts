@@ -31,6 +31,14 @@ export function createHost(body: HostCreate): Promise<HostRecord> {
   return apiFetch<HostRecord>('/admin/hosts', { method: 'POST', body });
 }
 
+// GET /admin/hosts/applications — hosts whose application is "pending", with
+// every two-path answer and the private documents. The backend returns null
+// when there are none.
+export async function fetchPendingApplications(): Promise<HostRecord[]> {
+  const res = await apiFetch<HostRecord[] | null>('/admin/hosts/applications');
+  return res ?? [];
+}
+
 export function approveHost(hostId: string): Promise<unknown> {
   return apiFetch(`/admin/hosts/${hostId}/approve`, { method: 'POST' });
 }

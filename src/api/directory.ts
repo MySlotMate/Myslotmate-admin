@@ -118,6 +118,29 @@ export interface HostRecord {
   // Weekly Tuesday auto payout to a verified bank account.
   auto_payout_enabled?: boolean;
   created_at: string;
+  rejection_reason?: string;
+  // Two-path application answers (backend HostApplicationAnswers). The *_url
+  // documents are private: only admins and the host may see them.
+  host_type?: 'community' | 'professional';
+  selfie_url?: string;
+  // Community path
+  community_name?: string;
+  community_category?: string;
+  years_experience?: string;
+  events_hosted?: string;
+  portfolio_url?: string;
+  portfolio_photo_urls?: string[];
+  // Professional path
+  profession?: string;
+  certificate_url?: string;
+  degree_url?: string;
+  license_number?: string;
+  professional_body?: string;
+  specialization?: string;
+  work_history?: string;
+  languages?: string[];
+  achievements?: string;
+  testimonial_url?: string;
 }
 
 export interface HostDetailUser {

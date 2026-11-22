@@ -14,6 +14,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/': 'Dashboard',
   '/users': 'Users',
   '/hosts': 'Hosts',
+  '/host-applications': 'Host applications',
   '/experiences': 'Experiences',
   '/bookings': 'Bookings',
   '/join-requests': 'Join requests',

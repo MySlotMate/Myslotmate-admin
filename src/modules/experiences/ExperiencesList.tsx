@@ -10,7 +10,7 @@ import {
 import { Chip, GRADIENT } from '../../components/event-form/EventFormKit';
 import { fetchEvents } from '../../api/directory';
 import type { AdminEvent } from '../../api/directory';
-import { deleteEvent, pauseEvent, resumeEvent } from '../../api/events';
+import { cancelEvent, deleteEvent, pauseEvent, resumeEvent } from '../../api/events';
 import { formatISTDateTime } from '../../lib/datetime';
 import { OnSpotBookingModal } from './OnSpotBookingModal';
 import { PauseExperienceModal } from './PauseExperienceModal';
@@ -134,6 +134,26 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
       setError(err instanceof Error ? err.message : 'Failed to resume experience.');
     } finally {
       setResumingId(null);
+    }
+  };
+
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const handleCancel = async (exp: AdminEvent) => {
+    if (
+      !window.confirm(
+        `Cancel "${exp.title}"? Every upcoming booking is refunded to the guest's wallet. This can't be undone.`,
+      )
+    )
+      return;
+    setCancellingId(exp.id);
+    setError(null);
+    try {
+      await cancelEvent(exp.id, exp.host_id);
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel experience.');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -321,6 +341,17 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
                           >
                             On-spot booking
                           </button>
+                          {exp.status !== 'cancelled' && !exp.is_expired && (
+                            <button
+                              type="button"
+                              disabled={cancellingId === exp.id}
+                              onClick={() => void handleCancel(exp)}
+                              className={`${ghostBtn} !text-amber-300/90`}
+                              title="Cancel and refund guests"
+                            >
+                              {cancellingId === exp.id ? 'Cancelling…' : 'Cancel'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={deletingId === exp.id}

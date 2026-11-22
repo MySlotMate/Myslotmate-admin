@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Users,
   UserCheck,
+  ClipboardCheck,
   Compass,
   CalendarDays,
   Inbox,
@@ -37,6 +38,7 @@ const SECTIONS = [
     items: [
       { name: 'Users', path: '/users', icon: Users },
       { name: 'Hosts', path: '/hosts', icon: UserCheck },
+      { name: 'Host applications', path: '/host-applications', icon: ClipboardCheck },
       { name: 'Experiences', path: '/experiences', icon: Compass },
       { name: 'Bookings', path: '/bookings', icon: CalendarDays },
       { name: 'Join requests', path: '/join-requests', icon: Inbox },

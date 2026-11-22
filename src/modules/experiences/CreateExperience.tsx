@@ -17,6 +17,7 @@ import {
   FiMapPin,
   FiSearch,
   FiShare2,
+  FiSlash,
   FiTrash2,
   FiUpload,
   FiVideo,
@@ -35,12 +36,14 @@ import {
 import { ImageCropModal } from '../../components/ImageCropModal';
 import { LocationSearchInput } from '../../components/LocationSearchInput';
 import { toast } from '../../lib/toast';
+import { apiBaseUrl } from '../../api/client';
 import { useDragDrop } from '../../hooks/useDragDrop';
 import { istInputToUTCISO, utcToISTInputs } from '../../lib/datetime';
 import {
   createEvent,
   updateEvent,
   deleteEvent,
+  cancelEvent,
   fetchEventDetail,
   publishEvent,
   uploadFiles,
@@ -50,6 +53,7 @@ import {
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
 import CouponsManager from './CouponsManager';
+import { GuestList } from './GuestList';
 import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
 import {
@@ -152,9 +156,10 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // Public customer site — used for share/view links.
 const SITE_URL = 'https://myslotmate.com';
-// The website's image proxy (adds CORS headers) — used to load hosted images
-// back into the cropper, since S3 won't serve them to the admin origin.
-const SITE_PROXY = 'https://www.myslotmate.com/api/proxy-image';
+// The backend's image proxy (GET /image-proxy, https S3 URLs only) — used to
+// load hosted images back into the cropper, since S3 won't serve them to the
+// admin origin.
+const SITE_PROXY = `${apiBaseUrl}/image-proxy`;
 
 // Same 4:5 frame as the poster on the website and the host dashboard.
 const POSTER_ASPECT = 4 / 5;
@@ -1083,7 +1088,7 @@ export const CreateExperience: React.FC = () => {
 
   // Re-crop an image that's already on the event: load it back into the 4:5
   // cropper. S3 doesn't allow the admin origin to read images, so this goes
-  // through the website's image proxy when a direct fetch is blocked.
+  // through the backend's image proxy when a direct fetch is blocked.
   const [recropIndex, setRecropIndex] = useState<number | null>(null);
   const [loadingRecrop, setLoadingRecrop] = useState<string | null>(null);
   const loadForRecrop = async (url: string): Promise<File | null> => {
@@ -1553,6 +1558,28 @@ export const CreateExperience: React.FC = () => {
     } finally {
       setDeleting(false);
       setShowDeleteConfirm(false);
+    }
+  };
+
+  // Cancel (edit mode): the backend refunds every still-active booking.
+  const [cancelling, setCancelling] = useState(false);
+  const handleCancelEvent = async () => {
+    if (!editEventId || !selectedHost?.id) return;
+    if (
+      !window.confirm(
+        `Cancel "${form.title || 'this experience'}"? Every upcoming booking is refunded to the guest's wallet. This can't be undone.`,
+      )
+    )
+      return;
+    setCancelling(true);
+    try {
+      await cancelEvent(editEventId, selectedHost.id);
+      setEventStatus('cancelled');
+      toast.success('Experience cancelled and guests refunded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel the experience.');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -2507,6 +2534,30 @@ export const CreateExperience: React.FC = () => {
                         Changing it changes the public URL; the old id link keeps working.
                       </span>
                     </p>
+                  </MoreOptions>
+                )}
+
+                {isEdit && editEventId && (
+                  <MoreOptions title="Guest list" summary="Bookings by session">
+                    <GuestList eventId={editEventId} />
+                  </MoreOptions>
+                )}
+
+                {isEdit && eventStatus !== 'cancelled' && (
+                  <MoreOptions title="Cancel experience" summary="Refunds guests">
+                    <p className="text-sm text-white/55">
+                      Cancels every upcoming session and refunds each active booking to the
+                      guest&rsquo;s wallet. Sessions that already happened are left as they are.
+                      This can&rsquo;t be undone.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={cancelling}
+                      onClick={() => void handleCancelEvent()}
+                      className="flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-500/[0.08] px-5 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/[0.14] disabled:opacity-50"
+                    >
+                      <FiSlash size={16} /> {cancelling ? 'Cancelling…' : 'Cancel and refund guests'}
+                    </button>
                   </MoreOptions>
                 )}
 

@@ -11,6 +11,7 @@ import { Overview } from './modules/dashboard/Overview';
 import { UsersDirectory } from './modules/users/UsersDirectory';
 import { HostsDirectory } from './modules/hosts/HostsDirectory';
 import { HostProfile } from './modules/hosts/HostProfile';
+import { HostApplications } from './modules/hosts/HostApplications';
 import { ExperiencesList } from './modules/experiences/ExperiencesList';
 import { CreateExperience } from './modules/experiences/CreateExperience';
 import { BookingsDirectory } from './modules/bookings/BookingsDirectory';
@@ -97,6 +98,7 @@ const AppContent: React.FC = () => {
                 <Route path="/users" element={<UsersDirectory searchQuery={globalSearch} />} />
                 <Route path="/hosts" element={<HostsDirectory searchQuery={globalSearch} />} />
                 <Route path="/hosts/:hostId" element={<HostProfile />} />
+                <Route path="/host-applications" element={<HostApplications />} />
                 <Route path="/experiences" element={<ExperiencesList searchQuery={globalSearch} />} />
                 <Route path="/bookings" element={<BookingsDirectory searchQuery={globalSearch} />} />
                 <Route path="/join-requests" element={<JoinRequestsDirectory />} />

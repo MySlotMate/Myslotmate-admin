@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, IndianRupee, ExternalLink, Pencil } from 'lucide-react';
+import { ApplicationAnswers } from './ApplicationAnswers';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -509,12 +510,11 @@ const DetailsTab: React.FC<{ host: HostDetail['host']; user: HostDetail['user'] 
           <Field label="Approved">{fmtDate(host.approved_at)}</Field>
           <Field label="Rejected">{fmtDate(host.rejected_at)}</Field>
           <Field label="Joined">{fmtDate(host.created_at)}</Field>
-          <Field label="Government ID">
-            {host.government_id_url
-              ? <a className="inline-flex items-center gap-1 text-brand-700 underline" href={host.government_id_url} target="_blank" rel="noreferrer">View document <ExternalLink className="h-3 w-3" /></a>
-              : '—'}
-          </Field>
         </div>
+        {/* Two-path answers and private documents from /become-host. */}
+        <Card className="mt-4 p-5">
+          <ApplicationAnswers host={host} showBasics={false} />
+        </Card>
       </section>
 
       {(host.bio || host.description || host.experience_desc) && (
