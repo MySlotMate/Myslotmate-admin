@@ -69,12 +69,13 @@ export const HostApplications: React.FC = () => {
     h.host_type ?? (h.is_professional ? 'professional' : 'community');
   const shown = apps.filter((h) => filter === 'all' || typeOf(h) === filter);
 
-  const approve = async (h: HostRecord) => {
-    if (!window.confirm(`Approve ${fullName(h)} as a verified host? They'll be able to sell tickets and receive payouts.`)) return;
+  const approve = async (h: HostRecord, asCommunity = false) => {
+    const what = asCommunity ? 'a community host (no 1:1 sessions)' : 'a verified host';
+    if (!window.confirm(`Approve ${fullName(h)} as ${what}? They'll be able to sell tickets and receive payouts.`)) return;
     setBusy(h.id);
     try {
-      await approveHost(h.id);
-      toast.success(`${fullName(h)} approved`);
+      await approveHost(h.id, asCommunity);
+      toast.success(`${fullName(h)} approved${asCommunity ? ' as a community host' : ''}`);
       setApps((prev) => prev.filter((x) => x.id !== h.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Approval failed.');
@@ -219,6 +220,16 @@ export const HostApplications: React.FC = () => {
                       >
                         <X className="h-4 w-4" /> Reject
                       </button>
+                      {typeOf(h) === 'professional' && (
+                        <button
+                          type="button"
+                          disabled={busy === h.id}
+                          onClick={() => void approve(h, true)}
+                          className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-semibold text-white/80 transition hover:bg-white/[0.06] disabled:opacity-50"
+                        >
+                          Approve as community
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={busy === h.id}

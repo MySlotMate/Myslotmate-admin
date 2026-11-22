@@ -39,8 +39,10 @@ export async function fetchPendingApplications(): Promise<HostRecord[]> {
   return res ?? [];
 }
 
-export function approveHost(hostId: string): Promise<unknown> {
-  return apiFetch(`/admin/hosts/${hostId}/approve`, { method: 'POST' });
+// asCommunity approves a professional application as a community host (no
+// 1:1 sessions), for applicants whose credentials don't meet the bar.
+export function approveHost(hostId: string, asCommunity = false): Promise<unknown> {
+  return apiFetch(`/admin/hosts/${hostId}/approve${asCommunity ? '?as=community' : ''}`, { method: 'POST' });
 }
 
 export function rejectHost(hostId: string, reason: string): Promise<unknown> {
