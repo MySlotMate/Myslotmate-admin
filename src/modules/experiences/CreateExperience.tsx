@@ -386,8 +386,6 @@ function GalleryUpload({
   recropping: number | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [current, setCurrent] = useState(0);
-  const index = Math.min(current, Math.max(0, previews.length - 1));
 
   const processFiles = useCallback(
     (files: File[]) => {
@@ -407,69 +405,54 @@ function GalleryUpload({
   const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
     useDragDrop({ onDrop: processFiles, accept: 'image/*' });
 
+  const tileAction =
+    'flex items-center justify-center gap-1 rounded-full bg-black/60 px-2.5 py-1.5 text-[12px] font-semibold text-white backdrop-blur-md transition hover:bg-black/80 disabled:opacity-50';
+
   return (
-    <div className="space-y-4">
-      {previews.length > 0 && (
-        <>
-          {/* Older photos in other shapes are shown whole over a blurred fill
-              rather than cropped, so admins can see what needs re-cropping. */}
-          <div className="group relative aspect-[4/5] w-full max-w-sm overflow-hidden rounded-[22px] bg-white/[0.06]">
-            <img
-              src={previews[index]}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl"
-            />
-            <img
-              src={previews[index]}
-              alt={`Photo ${index + 1}`}
-              className="relative block h-full w-full object-contain"
-            />
-            {previews.length > 1 && (
-              <span className="absolute top-3 left-3 rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white">
-                {index + 1} / {previews.length}
-              </span>
-            )}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {previews.map((p, i) => (
+        // Each photo in the 4:5 frame guests see. Older photos in other
+        // shapes show whole over a blurred fill, so it's clear which ones
+        // still need re-cropping.
+        <div
+          key={`${p}-${i}`}
+          className="group relative aspect-[4/5] overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.06]"
+        >
+          <img
+            src={p}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl"
+          />
+          <img src={p} alt={`Photo ${i + 1}`} className="relative block h-full w-full object-contain" />
+          <span className="absolute top-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+            {i + 1}
+          </span>
+          <div className="absolute inset-x-2 bottom-2 flex gap-1.5">
             <button
               type="button"
-              onClick={() => onRecrop(index)}
+              onClick={() => onRecrop(i)}
               disabled={recropping !== null}
-              className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-[#fff] px-3.5 py-2 text-[13px] font-semibold text-[#5a1fc4] shadow-lg transition hover:scale-[1.03] disabled:opacity-60"
+              aria-label={`Re-crop photo ${i + 1} to 4:5`}
+              className={`${tileAction} flex-1`}
             >
-              <FiCrop size={14} />
-              {recropping === index ? 'Loading…' : 'Re-crop to 4:5'}
+              <FiCrop size={12} />
+              {recropping === i ? 'Loading…' : 'Re-crop'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemove(i)}
+              aria-label={`Remove photo ${i + 1}`}
+              title="Remove"
+              className={`${tileAction} hover:!bg-red-500`}
+            >
+              <FiTrash2 size={12} />
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {previews.map((p, i) => (
-              <div
-                key={`${p}-${i}`}
-                className={`relative overflow-hidden rounded-xl border-2 transition ${
-                  index === i ? 'border-[#B724EA]' : 'border-transparent'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setCurrent(i)}
-                  aria-label={`Show photo ${i + 1}`}
-                  className="block"
-                >
-                  <img src={p} alt="" className="h-20 w-16 object-cover" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRemove(i)}
-                  aria-label={`Remove photo ${i + 1}`}
-                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-red-500"
-                >
-                  <FiX size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+        </div>
+      ))}
 
+      {/* Add tile: click or drop photos; each goes through the 4:5 cropper. */}
       <div
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -478,22 +461,21 @@ function GalleryUpload({
         onClick={() => inputRef.current?.click()}
         role="button"
         tabIndex={0}
+        aria-label="Add photos"
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
         }}
-        className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition ${
+        className={`flex aspect-[4/5] cursor-pointer flex-col items-center justify-center rounded-[18px] border-2 border-dashed p-4 text-center transition ${
           isDragging
             ? 'border-[#A020F0] bg-[#A020F0]/10'
             : 'border-white/15 hover:border-[#A020F0] hover:bg-white/[0.04]'
         }`}
       >
-        <FiUpload className={`mx-auto mb-2 ${isDragging ? 'text-[#D8B4FE]' : 'text-white/40'}`} size={22} />
-        <p className={`text-sm ${isDragging ? 'font-semibold text-[#D8B4FE]' : 'text-white/60'}`}>
-          {isDragging ? 'Drop photos here' : 'Click to upload or drag photos'}
+        <FiUpload className={`mb-2 ${isDragging ? 'text-[#D8B4FE]' : 'text-white/50'}`} size={22} />
+        <p className={`text-sm font-medium ${isDragging ? 'text-[#D8B4FE]' : 'text-white/75'}`}>
+          {isDragging ? 'Drop photos here' : 'Add photos'}
         </p>
-        <p className="mt-1 text-xs text-white/35">
-          PNG or JPG up to 5MB · cropped to 4:5
-        </p>
+        <p className="mt-1 text-[11px] text-white/35">PNG or JPG up to 5MB</p>
       </div>
       <input
         ref={inputRef}
@@ -2005,6 +1987,24 @@ export const CreateExperience: React.FC = () => {
               </p>
             </Section>
 
+            {/* More photos: shown after the poster on the event page */}
+            <Section
+              title={`More photos${form.galleryPreviews.length ? ` · ${form.galleryPreviews.length}` : ''}`}
+              hint="Shown after the poster on the event page. Add, remove or re-crop to 4:5 here."
+            >
+              <GalleryUpload
+                previews={form.galleryPreviews}
+                onUpload={handleGalleryUpload}
+                onRemove={removeGalleryImage}
+                onRecrop={(i) => void recropGallery(i)}
+                recropping={
+                  loadingRecrop?.startsWith('gallery-')
+                    ? Number(loadingRecrop.slice(8))
+                    : null
+                }
+              />
+            </Section>
+
             {/* Tickets */}
             <Section title={isOneOnOne ? 'Price' : 'Tickets'}>
               {!isOneOnOne && (
@@ -2300,25 +2300,6 @@ export const CreateExperience: React.FC = () => {
                     <CouponsManager eventId={editEventId} hostId={selectedHost.id} kind="free" />
                   </MoreOptions>
                 )}
-
-                <MoreOptions
-                  title="More photos"
-                  summary={
-                    form.galleryPreviews.length ? `${form.galleryPreviews.length} added` : 'None'
-                  }
-                >
-                  <GalleryUpload
-                    previews={form.galleryPreviews}
-                    onUpload={handleGalleryUpload}
-                    onRemove={removeGalleryImage}
-                    onRecrop={(i) => void recropGallery(i)}
-                    recropping={
-                      loadingRecrop?.startsWith('gallery-')
-                        ? Number(loadingRecrop.slice(8))
-                        : null
-                    }
-                  />
-                </MoreOptions>
 
                 {!isOneOnOne && (
                   <MoreOptions
