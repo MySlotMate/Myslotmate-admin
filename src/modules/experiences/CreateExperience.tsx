@@ -1,27 +1,28 @@
-// Admin "create experience on behalf of a host" page.
+// Admin "create / edit an experience on behalf of a host" page.
 //
-// The form UI is a direct port of the customer frontend's create-experience
-// wizard (MySlotmate-Frontend/src/app/host-dashboard/experiences/new/page.tsx),
-// with one admin-specific addition: a host picker at the top of Step 1 that
-// replaces the logged-in host (useMyHost) from the original. Frontend-only
-// extras that depend on Next.js API routes or Gemini (AI suggestion chips,
-// description generation, content moderation) and the Leaflet map picker are
-// not ported.
+// Laid out exactly like the host dashboard's edit page
+// (MySlotmate-Frontend/src/app/host-dashboard/experiences/[id]/page.tsx): a
+// 4:5 poster on the left, the event typed into directly on the right, optional
+// settings folded under "More options", and one floating save pill. Admin-only
+// additions sit in the same visual language: the host picker under "Hosted by",
+// the URL slug, languages & level, terms on the ticket, and coupons.
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   FiArrowLeft,
-  FiArrowRight,
-  FiUpload,
-  FiX,
   FiCheck,
-  FiMapPin,
-  FiCalendar,
-  FiShare2,
+  FiCrop,
   FiExternalLink,
+  FiMapPin,
   FiSearch,
+  FiShare2,
+  FiTrash2,
+  FiUpload,
+  FiVideo,
+  FiX,
 } from 'react-icons/fi';
+import { LuGlobe, LuLock } from 'react-icons/lu';
 import { RichTextEditor } from '../../components/RichTextEditor';
 import SessionWindowsEditor from '../../components/SessionWindowsEditor';
 import {
@@ -39,6 +40,7 @@ import { istInputToUTCISO, utcToISTInputs } from '../../lib/datetime';
 import {
   createEvent,
   updateEvent,
+  deleteEvent,
   fetchEventDetail,
   publishEvent,
   uploadFiles,
@@ -48,14 +50,31 @@ import {
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
 import CouponsManager from './CouponsManager';
-import { fetchHosts } from '../../api/directory';
+import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
+import {
+  AddPill,
+  Chip,
+  CoverPoster,
+  FIELD,
+  GRADIENT,
+  INLINE_FIELD,
+  INLINE_PICKER,
+  MoodSelector,
+  MoreOptions,
+  ROW_INPUT,
+  Row,
+  Rows,
+  Section,
+  Segmented,
+  ToggleRow,
+} from '../../components/event-form/EventFormKit';
+import { DatePill, TimePill } from '../../components/event-form/DateTimePills';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 interface FormData {
-  // Step 1 - Basics
   title: string;
   slug: string; // public URL slug; editable in edit mode
   hookLine: string;
@@ -77,7 +96,6 @@ interface FormData {
   maxGroupSize: number;
   languages: string[];
   level: string;
-  // Step 2 - Pricing & Schedule
   isFree: boolean;
   priceCents: number;
   useTiers: boolean;
@@ -105,28 +123,14 @@ interface FormData {
   sessionIsWeekly: boolean;
   cancellationPolicy: string;
   termsAndConditions: string;
-  // Attendee details
   requiresAttendeeDetails: boolean;
   attendeeFields: string[];
-  // Privacy & access
   isPrivate: boolean;
   privateAccessMode: 'passkey' | 'rsvp';
   accessMode: 'shared' | 'unique';
   accessPasskey: string;
   passkeyGrantsFree: boolean;
 }
-
-const MOODS = [
-  'Adventure',
-  'Social',
-  'Wellness',
-  'Creative',
-  'Culinary',
-  'Cultural',
-  'Fashion',
-  'Fitness',
-  'Family',
-];
 
 const DURATION_OPTIONS = [30, 60, 90, 120, 180, 240];
 
@@ -137,43 +141,86 @@ const LANGUAGE_OPTIONS = ['English', 'Hindi', 'Bengali', 'Assamese'];
 const LEVEL_OPTIONS = ['Beginner Friendly', 'Intermediate', 'Advanced'];
 
 const CANCELLATION_POLICIES = [
-  {
-    value: 'flexible',
-    label: 'Flexible',
-    description: 'Full refund up to 24 hours before',
-  },
-  {
-    value: 'moderate',
-    label: 'Moderate',
-    description: 'Full refund up to 5 days before',
-  },
-  {
-    value: 'strict',
-    label: 'Strict',
-    description: '50% refund up to 1 week before',
-  },
-  {
-    value: 'no_refund',
-    label: 'No Refund',
-    description: 'Non-refundable once booked',
-  },
+  { value: 'flexible', label: 'Flexible', description: 'Full refund up to 24 hours before' },
+  { value: 'moderate', label: 'Moderate', description: 'Full refund up to 5 days before' },
+  { value: 'strict', label: 'Strict', description: '50% refund up to 1 week before' },
+  { value: 'no_refund', label: 'No Refund', description: 'Non-refundable once booked' },
 ];
 
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-// Public customer site — used for share/view links after publishing.
+// Public customer site — used for share/view links.
 const SITE_URL = 'https://myslotmate.com';
+// The website's image proxy (adds CORS headers) — used to load hosted images
+// back into the cropper, since S3 won't serve them to the admin origin.
+const SITE_PROXY = 'https://www.myslotmate.com/api/proxy-image';
+
+// Same 4:5 frame as the poster on the website and the host dashboard.
+const POSTER_ASPECT = 4 / 5;
+
+const minsLabel = (mins: number) =>
+  mins >= 60 ? `${mins / 60}h` : `${mins}m`;
 
 /* ------------------------------------------------------------------ */
-/*  Host Selector — admin-specific: pick the host to create for        */
+/*  Number field that can be cleared while typing                      */
 /* ------------------------------------------------------------------ */
-function HostSelector({
+function NumberInput({
+  value,
+  onChange,
+  min = 0,
+  decimal = false,
+  placeholder,
+  className = ROW_INPUT,
+  ariaLabel,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  decimal?: boolean;
+  placeholder?: string;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  // While typing, show exactly what was typed (so the field can be cleared);
+  // otherwise show the form's value, which also follows the form loading.
+  const [draft, setDraft] = useState<string | null>(null);
+  const parse = (s: string) => (decimal ? parseFloat(s) : parseInt(s, 10));
+  return (
+    <input
+      type="number"
+      inputMode={decimal ? 'decimal' : 'numeric'}
+      min={min}
+      value={draft ?? String(value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const n = parse(e.target.value);
+        if (!Number.isNaN(n)) onChange(Math.max(min, n));
+      }}
+      onBlur={() => {
+        const n = parse(draft ?? String(value));
+        setDraft(null);
+        onChange(Number.isNaN(n) ? min : Math.max(min, n));
+      }}
+      className={className}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Host picker — admin-specific: who the experience belongs to        */
+/* ------------------------------------------------------------------ */
+function HostPicker({
   selectedHost,
+  locked,
   onSelect,
   hasError,
 }: {
-  selectedHost: Host | null;
+  selectedHost: (Host & { avatarUrl?: string }) | null;
+  /** Edit mode: the owner can't change. */
+  locked: boolean;
   onSelect: (host: Host | null) => void;
   hasError?: boolean;
 }) {
@@ -201,11 +248,12 @@ function HostSelector({
     }, 350);
   }, []);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -219,20 +267,27 @@ function HostSelector({
 
   if (selectedHost) {
     return (
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Host <span className="text-red-500">*</span>
-        </label>
-        <div className="flex items-center justify-between rounded-lg border border-[#0094CA] bg-[#0094CA]/5 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0094CA] text-sm font-bold text-white">
-              {selectedHost.name.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{selectedHost.name}</p>
-              <p className="text-xs text-gray-500">{selectedHost.city}</p>
-            </div>
+      <div className="flex items-center gap-3">
+        {selectedHost.avatarUrl ? (
+          <img
+            src={selectedHost.avatarUrl}
+            alt=""
+            className="h-12 w-12 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white ${GRADIENT}`}
+          >
+            {(selectedHost.name?.[0] ?? 'H').toUpperCase()}
           </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-white">{selectedHost.name}</p>
+          {selectedHost.city && (
+            <p className="truncate text-xs text-white/40">{selectedHost.city}</p>
+          )}
+        </div>
+        {!locked && (
           <button
             type="button"
             onClick={() => {
@@ -240,337 +295,210 @@ function HostSelector({
               setQuery('');
               setResults([]);
             }}
-            className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-            title="Change host"
+            className="rounded-full px-3 py-1.5 text-[13px] font-medium text-white/50 transition hover:bg-white/[0.06] hover:text-white"
           >
-            <FiX size={16} />
+            Change
           </button>
-        </div>
-        <p className="text-xs text-gray-500">
-          The experience will be created under this host's profile.
-        </p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700">
-        Host <span className="text-red-500">*</span>
-      </label>
-      <p className="text-xs text-gray-500">
-        Search and select the host this experience belongs to.
-      </p>
-      <div ref={containerRef} className="relative">
-        <div className="relative">
-          <FiSearch className="absolute top-1/2 left-4 -translate-y-1/2 text-gray-400" size={16} />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setIsOpen(true);
-              search(e.target.value);
-            }}
-            onFocus={() => {
-              setIsOpen(true);
-              if (results.length === 0) search(query);
-            }}
-            placeholder="Search hosts by name, city, or phone..."
-            className={`w-full rounded-lg border py-3 pr-4 pl-10 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-              hasError ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-transparent'
-            }`}
-          />
-        </div>
-
-        {isOpen && (
-          <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-            {loading && (
-              <div className="px-4 py-3 text-sm text-gray-500">Searching hosts…</div>
-            )}
-            {!loading && results.length === 0 && (
-              <div className="px-4 py-3 text-sm text-gray-500">No hosts found.</div>
-            )}
-            {!loading &&
-              results.map((host) => (
-                <button
-                  key={host.id}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onSelect(host);
-                    setIsOpen(false);
-                  }}
-                  className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-gray-50"
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">
-                    {host.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{host.name}</p>
-                    <p className="text-xs text-gray-500">{host.city}</p>
-                  </div>
-                </button>
-              ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Step Indicator Component                                           */
-/* ------------------------------------------------------------------ */
-function StepIndicator({ currentStep }: { currentStep: number }) {
-  return (
-    <div className="mb-8 flex items-center justify-center gap-2">
+    <div ref={containerRef} className="relative">
       <div
-        className={`flex items-center gap-2 ${currentStep >= 1 ? 'text-[#0094CA]' : 'text-gray-400'}`}
+        className={`flex items-center gap-2 rounded-2xl border bg-[#121426] px-4 transition focus-within:border-[#B57BFF] ${
+          hasError ? 'border-red-500' : 'border-white/10'
+        }`}
       >
-        <div
-          className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${currentStep >= 1 ? 'bg-[#0094CA] text-white' : 'bg-gray-200'}`}
-        >
-          {currentStep > 1 ? <FiCheck /> : '1'}
-        </div>
-        <span className="hidden text-sm font-medium sm:inline">The Basics</span>
+        <FiSearch className="shrink-0 text-white/40" size={16} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+            search(e.target.value);
+          }}
+          onFocus={() => {
+            setIsOpen(true);
+            if (results.length === 0) search(query);
+          }}
+          placeholder="Pick the host — search by name, city or phone"
+          aria-label="Search hosts"
+          className="row-input w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-white/30"
+        />
       </div>
-      <div className={`h-0.5 w-12 ${currentStep > 1 ? 'bg-[#0094CA]' : 'bg-gray-200'}`} />
-      <div
-        className={`flex items-center gap-2 ${currentStep >= 2 ? 'text-[#0094CA]' : 'text-gray-400'}`}
-      >
-        <div
-          className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${currentStep >= 2 ? 'bg-[#0094CA] text-white' : 'bg-gray-200'}`}
-        >
-          2
-        </div>
-        <span className="hidden text-sm font-medium sm:inline">Schedule & Pricing</span>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Image Upload Component                                             */
-/* ------------------------------------------------------------------ */
-function ImageUpload({
-  label,
-  helpText,
-  preview,
-  onUpload,
-  onRemove,
-  multiple = false,
-  previews = [],
-  onRemoveMultiple,
-}: {
-  label: string;
-  helpText?: string;
-  preview?: string | null;
-  onUpload: (files: File[]) => void;
-  onRemove?: () => void;
-  multiple?: boolean;
-  previews?: string[];
-  onRemoveMultiple?: (index: number) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dragDropZoneRef = useRef<HTMLDivElement>(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  // Safely adjust slide index when images are added/removed
-  useEffect(() => {
-    if (currentImageIndex >= previews.length) {
-      setCurrentImageIndex(Math.max(0, previews.length - 1));
-    }
-  }, [previews.length, currentImageIndex]);
-
-  const processFiles = (files: File[]) => {
-    if (files.length === 0) return;
-
-    // Validate file sizes
-    const oversizedFiles: string[] = [];
-    const validFiles: File[] = [];
-
-    files.forEach((file) => {
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        oversizedFiles.push(`${file.name} (${(file.size / (1024 * 1024)).toFixed(2)}MB)`);
-      } else {
-        validFiles.push(file);
-      }
-    });
-
-    // Show warning if any files exceed limit
-    if (oversizedFiles.length > 0) {
-      toast.error(
-        `File${oversizedFiles.length > 1 ? 's' : ''} too large:\n${oversizedFiles.join(', ')}\n\nMax size is ${MAX_FILE_SIZE_MB}MB per file.`
-      );
-    }
-
-    // Only upload valid files
-    if (validFiles.length > 0) {
-      onUpload(validFiles);
-    }
-  };
-
-  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useDragDrop(
-    {
-      onDrop: processFiles,
-      accept: 'image/*',
-    }
-  );
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    processFiles(files);
-    if (inputRef.current) inputRef.current.value = '';
-  };
-
-  return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
-      {helpText && <p className="text-xs text-gray-500">{helpText}</p>}
-
-      {!multiple && preview && (
-        <div className="relative inline-block w-full max-w-md">
-          <img
-            src={preview}
-            alt="Preview"
-            loading="lazy"
-            className="aspect-[16/9] w-full rounded-lg object-cover"
-          />
-          <button
-            type="button"
-            onClick={onRemove}
-            className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
-          >
-            <FiX size={14} />
-          </button>
+      {isOpen && (
+        <div className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#14152a] p-1 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]">
+          {loading && <p className="px-3 py-3 text-sm text-white/50">Searching hosts…</p>}
+          {!loading && results.length === 0 && (
+            <p className="px-3 py-3 text-sm text-white/50">No hosts found.</p>
+          )}
+          {!loading &&
+            results.map((host) => (
+              <button
+                key={host.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(host);
+                  setIsOpen(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+                  {host.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-white">{host.name}</span>
+                  <span className="block truncate text-xs text-white/45">{host.city}</span>
+                </span>
+              </button>
+            ))}
         </div>
       )}
+    </div>
+  );
+}
 
-      {multiple && previews.length > 0 && (
-        <div className="space-y-4">
-          <div className="group relative">
-            {/* Photos are cropped to 16:9 on upload, so this preview matches the
-                fixed 16:9 frame the live experience page renders them in. */}
-            <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-gray-100">
-              {/* Main Image */}
-              <img
-                src={previews[currentImageIndex]}
-                alt={`Cover photo preview ${currentImageIndex + 1}`}
-                loading="lazy"
-                className="block h-full w-full object-cover transition-opacity duration-300"
-              />
+/* ------------------------------------------------------------------ */
+/*  More photos — 4:5, the same frame as the poster                    */
+/* ------------------------------------------------------------------ */
+function GalleryUpload({
+  previews,
+  onUpload,
+  onRemove,
+  onRecrop,
+  recropping,
+}: {
+  previews: string[];
+  onUpload: (files: File[]) => void;
+  onRemove: (index: number) => void;
+  /** Load a photo back into the 4:5 cropper. */
+  onRecrop: (index: number) => void;
+  /** Index of the photo being loaded for re-crop, if any. */
+  recropping: number | null;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [current, setCurrent] = useState(0);
+  const index = Math.min(current, Math.max(0, previews.length - 1));
 
-              {/* Navigation Arrows */}
-              {previews.length > 1 && (
-                <>
-                  {/* Left Arrow */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCurrentImageIndex((prev) => (prev === 0 ? previews.length - 1 : prev - 1));
-                    }}
-                    className="absolute top-1/2 left-4 z-10 -translate-y-1/2 rounded-full bg-white/80 p-2.5 opacity-0 shadow-md transition group-hover:opacity-100 hover:bg-white"
-                    aria-label="Previous image"
-                  >
-                    <svg className="h-4 w-4 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
+  const processFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return;
+      const ok = files.filter((f) => f.size <= MAX_FILE_SIZE_BYTES);
+      const tooBig = files.filter((f) => f.size > MAX_FILE_SIZE_BYTES);
+      if (tooBig.length > 0) {
+        toast.error(
+          `Too large: ${tooBig.map((f) => f.name).join(', ')}. Max size is ${MAX_FILE_SIZE_MB}MB per file.`,
+        );
+      }
+      if (ok.length > 0) onUpload(ok);
+    },
+    [onUpload],
+  );
 
-                  {/* Right Arrow */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCurrentImageIndex((prev) => (prev === previews.length - 1 ? 0 : prev + 1));
-                    }}
-                    className="absolute top-1/2 right-4 z-10 -translate-y-1/2 rounded-full bg-white/80 p-2.5 opacity-0 shadow-md transition group-hover:opacity-100 hover:bg-white"
-                    aria-label="Next image"
-                  >
-                    <svg className="h-4 w-4 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
+  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
+    useDragDrop({ onDrop: processFiles, accept: 'image/*' });
 
-                  {/* Image Counter */}
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">
-                    {currentImageIndex + 1} / {previews.length}
-                  </div>
-                </>
-              )}
-            </div>
+  return (
+    <div className="space-y-4">
+      {previews.length > 0 && (
+        <>
+          {/* Older photos in other shapes are shown whole over a blurred fill
+              rather than cropped, so admins can see what needs re-cropping. */}
+          <div className="group relative aspect-[4/5] w-full max-w-sm overflow-hidden rounded-[22px] bg-white/[0.06]">
+            <img
+              src={previews[index]}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl"
+            />
+            <img
+              src={previews[index]}
+              alt={`Photo ${index + 1}`}
+              className="relative block h-full w-full object-contain"
+            />
+            {previews.length > 1 && (
+              <span className="absolute top-3 left-3 rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white">
+                {index + 1} / {previews.length}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => onRecrop(index)}
+              disabled={recropping !== null}
+              className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-full bg-[#fff] px-3.5 py-2 text-[13px] font-semibold text-[#5a1fc4] shadow-lg transition hover:scale-[1.03] disabled:opacity-60"
+            >
+              <FiCrop size={14} />
+              {recropping === index ? 'Loading…' : 'Re-crop to 4:5'}
+            </button>
           </div>
-
-          {/* Thumbnail list with delete actions */}
           <div className="flex flex-wrap gap-2">
             {previews.map((p, i) => (
               <div
-                key={i}
-                onClick={() => setCurrentImageIndex(i)}
-                className={`relative cursor-pointer rounded-lg border-2 transition overflow-hidden ${
-                  currentImageIndex === i ? 'border-[#0094CA]' : 'border-transparent'
+                key={`${p}-${i}`}
+                className={`relative overflow-hidden rounded-xl border-2 transition ${
+                  index === i ? 'border-[#B724EA]' : 'border-transparent'
                 }`}
               >
-                <img
-                  src={p}
-                  alt={`Thumbnail ${i + 1}`}
-                  loading="lazy"
-                  className="h-16 w-16 object-cover"
-                />
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveMultiple?.(i);
-                  }}
-                  className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition shadow"
+                  onClick={() => setCurrent(i)}
+                  aria-label={`Show photo ${i + 1}`}
+                  className="block"
                 >
-                  <FiX size={10} />
+                  <img src={p} alt="" className="h-20 w-16 object-cover" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  aria-label={`Remove photo ${i + 1}`}
+                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-red-500"
+                >
+                  <FiX size={11} />
                 </button>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
-      {/* Upload button */}
-      {(!preview || multiple) && (
-        <div
-          ref={dragDropZoneRef}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-          className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition ${
-            isDragging
-              ? 'scale-105 border-[#0094CA] bg-[#0094CA]/5'
-              : 'border-gray-300 hover:border-[#0094CA] hover:bg-gray-50'
-          }`}
-        >
-          <FiUpload
-            className={`mx-auto mb-2 transition ${isDragging ? 'text-[#0094CA]' : 'text-gray-400'}`}
-            size={24}
-          />
-          <p
-            className={`text-sm transition ${isDragging ? 'font-semibold text-[#0094CA]' : 'text-gray-500'}`}
-          >
-            {isDragging
-              ? `Drop ${multiple ? 'images' : 'image'} here`
-              : `Click to upload or drag ${multiple ? 'images' : 'image'}`}
-          </p>
-          <p className="mt-1 text-xs text-gray-400">PNG, JPG up to 5MB</p>
-        </div>
-      )}
-
+      <div
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+        }}
+        className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition ${
+          isDragging
+            ? 'border-[#A020F0] bg-[#A020F0]/10'
+            : 'border-white/15 hover:border-[#A020F0] hover:bg-white/[0.04]'
+        }`}
+      >
+        <FiUpload className={`mx-auto mb-2 ${isDragging ? 'text-[#D8B4FE]' : 'text-white/40'}`} size={22} />
+        <p className={`text-sm ${isDragging ? 'font-semibold text-[#D8B4FE]' : 'text-white/60'}`}>
+          {isDragging ? 'Drop photos here' : 'Click to upload or drag photos'}
+        </p>
+        <p className="mt-1 text-xs text-white/35">
+          PNG or JPG up to 5MB · cropped to 4:5
+        </p>
+      </div>
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        multiple={multiple}
-        onChange={handleFileChange}
+        multiple
+        onChange={(e) => {
+          processFiles(Array.from(e.target.files ?? []));
+          e.target.value = '';
+        }}
         className="hidden"
       />
     </div>
@@ -578,47 +506,9 @@ function ImageUpload({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Mood Selector Component                                            */
+/*  Title — typed straight onto the page, with template suggestions    */
 /* ------------------------------------------------------------------ */
-function MoodSelector({
-  value,
-  onChange,
-  hasError,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  hasError?: boolean;
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700">Experience Mood</label>
-      <p className="text-xs text-gray-500">What vibe best describes the experience?</p>
-      <div
-        className={`flex flex-wrap gap-2 rounded-xl p-1 transition ${hasError ? 'bg-red-50 ring-1 ring-red-500' : ''}`}
-      >
-        {MOODS.map((mood) => (
-          <button
-            key={mood}
-            type="button"
-            onClick={() => onChange(mood.toLowerCase())}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              value === mood.toLowerCase()
-                ? 'bg-[#0094CA] text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {mood}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Title Autocomplete — typeahead filtered by mood-keyed templates    */
-/* ------------------------------------------------------------------ */
-function TitleAutocomplete({
+function TitleField({
   mood,
   value,
   onChange,
@@ -632,174 +522,141 @@ function TitleAutocomplete({
   hasError?: boolean;
 }) {
   const [templates, setTemplates] = useState<ExperienceTemplate[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!mood) {
-      setTemplates([]);
-      return;
-    }
+    if (!mood) return;
     let cancelled = false;
-    setIsLoading(true);
     listExperienceTemplates(mood)
       .then((data) => {
         if (!cancelled) setTemplates(data ?? []);
       })
-      .catch((err) => console.error('Template fetch failed:', err))
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+      .catch((err) => console.error('Template fetch failed:', err));
     return () => {
       cancelled = true;
     };
   }, [mood]);
 
   const q = value.trim().toLowerCase();
-  const filtered = templates.filter((t) => (q === '' ? true : t.title.toLowerCase().includes(q)));
-
-  const moodDisabled = !mood;
+  const filtered = (mood ? templates : []).filter(
+    (t) => q === '' || t.title.toLowerCase().includes(q),
+  );
 
   return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700">
-        Experience Title <span className="text-red-500">*</span>
-      </label>
-      <div className="relative">
-        <input
-          type="text"
-          value={value}
-          disabled={moodDisabled}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setShowDropdown(true);
-          }}
-          onFocus={() => {
-            if (blurTimer.current) {
-              clearTimeout(blurTimer.current);
-              blurTimer.current = null;
-            }
-            setShowDropdown(true);
-          }}
-          onBlur={() => {
-            // Delay close so option mousedown can register first.
-            blurTimer.current = setTimeout(() => {
-              setShowDropdown(false);
-            }, 120);
-          }}
-          placeholder={
-            moodDisabled
-              ? 'Pick a mood first to see suggestions'
-              : 'Start typing — or pick a suggestion below'
-          }
-          className={`w-full rounded-lg border px-4 py-3 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-            moodDisabled ? 'cursor-not-allowed bg-gray-50 text-gray-400' : ''
-          } ${hasError ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-transparent'}`}
-          maxLength={100}
-        />
-
-        {showDropdown && !moodDisabled && (
-          <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-            {isLoading && (
-              <div className="px-4 py-3 text-sm text-gray-500">Loading suggestions…</div>
-            )}
-            {!isLoading && filtered.length === 0 && (
-              <div className="px-4 py-3 text-sm text-gray-500">
-                No matching templates — keep typing your own title.
-              </div>
-            )}
-            {!isLoading &&
-              filtered.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  // onMouseDown fires before the input's onBlur, so the click sticks.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onSelectTemplate(t.title, t.hook_line);
-                    setShowDropdown(false);
-                  }}
-                  className="block w-full border-b border-gray-100 px-4 py-3 text-left text-sm transition last:border-b-0 hover:bg-gray-50"
-                >
-                  <p className="font-semibold text-gray-900">{t.title}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">{t.hook_line}</p>
-                </button>
-              ))}
-          </div>
-        )}
-      </div>
-      <p className="text-xs text-gray-400">{value.length}/100 characters</p>
+    <div className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setShowDropdown(true);
+        }}
+        onFocus={() => {
+          if (blurTimer.current) clearTimeout(blurTimer.current);
+          setShowDropdown(true);
+        }}
+        onBlur={() => {
+          // Delay close so a suggestion's mousedown registers first.
+          blurTimer.current = setTimeout(() => setShowDropdown(false), 120);
+        }}
+        placeholder="Event name"
+        aria-label="Event name"
+        maxLength={100}
+        className={`font-outfit w-full rounded-2xl border bg-transparent px-2 py-2 text-[28px] leading-tight font-bold text-white transition outline-none placeholder:text-white/30 hover:bg-white/[0.03] focus:border-white/10 focus:bg-white/[0.05] md:text-[32px] ${
+          hasError ? 'border-red-500/70' : 'border-transparent'
+        }`}
+        style={{ backgroundColor: 'transparent' }}
+      />
+      {showDropdown && filtered.length > 0 && (
+        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#14152a] p-1 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]">
+          <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-white/40 uppercase">
+            Suggestions
+          </p>
+          {filtered.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onSelectTemplate(t.title, t.hook_line);
+                setShowDropdown(false);
+              }}
+              className="block w-full rounded-xl px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
+            >
+              <span className="block text-sm font-semibold text-white">{t.title}</span>
+              <span className="mt-0.5 block text-xs text-white/50">{t.hook_line}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Success Modal Component                                            */
+/*  Done sheet                                                         */
 /* ------------------------------------------------------------------ */
 function SuccessModal({
   isOpen,
-  experienceId,
+  slugOrId,
   isDraft,
   hostName,
+  isEdit,
 }: {
   isOpen: boolean;
-  experienceId: string;
+  slugOrId: string;
   isDraft: boolean;
   hostName: string;
+  isEdit: boolean;
 }) {
   const navigate = useNavigate();
-
   if (!isOpen) return null;
+  const url = `${SITE_URL}/experience/${slugOrId}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#121426] p-8 text-center shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]">
         <div
-          className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
-            isDraft ? 'bg-gray-100' : 'bg-green-100'
+          className={`mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full ${
+            isDraft ? 'bg-white/10' : `${GRADIENT} shadow-[0_0_30px_rgba(183,36,234,0.45)]`
           }`}
         >
-          <FiCheck className={isDraft ? 'text-gray-500' : 'text-green-600'} size={32} />
+          <FiCheck className="text-white" size={30} />
         </div>
-        <h2 className="mb-2 text-2xl font-bold text-gray-900">
-          {isDraft ? 'Draft Saved' : 'Experience is Live! 🎉'}
+        <h2 className="font-outfit mb-2 text-2xl font-bold text-white">
+          {isDraft ? 'Draft saved' : isEdit ? 'Changes saved' : 'Experience is live'}
         </h2>
-        <p className="mb-6 text-gray-500">
+        <p className="mb-6 text-sm leading-6 text-white/55">
           {isDraft
-            ? `The draft has been saved under ${hostName}'s profile. The host can finish it from their Drafts tab.`
-            : `The experience has been published on behalf of ${hostName} and is now visible to guests.`}
+            ? `Saved under ${hostName}'s profile. The host can finish it from their drafts.`
+            : `Published on behalf of ${hostName} and visible to guests.`}
         </p>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2.5">
           {!isDraft && (
-            <>
+            <div className="flex gap-2.5">
               <button
                 onClick={() => {
-                  const url = `${SITE_URL}/experience/${experienceId}`;
                   void navigator.clipboard.writeText(url);
-                  toast.success('Link copied to clipboard!');
+                  toast.success('Link copied');
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-100 py-3 font-medium transition hover:bg-gray-200"
+                className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                <FiShare2 size={18} />
-                Share Experience
+                <FiShare2 size={16} /> Copy link
               </button>
               <button
-                onClick={() =>
-                  window.open(`${SITE_URL}/experience/${experienceId}`, '_blank', 'noopener')
-                }
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-100 py-3 font-medium transition hover:bg-gray-200"
+                onClick={() => window.open(url, '_blank', 'noopener')}
+                className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                <FiExternalLink size={18} />
-                View Live Page
+                <FiExternalLink size={16} /> View live
               </button>
-            </>
+            </div>
           )}
           <button
             onClick={() => navigate('/experiences')}
-            className="w-full rounded-lg bg-[#0094CA] py-3 font-semibold text-white transition hover:bg-[#007ba8]"
+            className={`w-full rounded-full py-3 text-sm font-semibold text-white transition hover:opacity-90 ${GRADIENT}`}
           >
-            Back to Experiences
+            Back to experiences
           </button>
         </div>
       </div>
@@ -815,7 +672,8 @@ export const CreateExperience: React.FC = () => {
   const { id: editEventId } = useParams<{ id: string }>();
   const isEdit = !!editEventId;
   const [loadingEvent, setLoadingEvent] = useState(isEdit);
-  const [currentStep, setCurrentStep] = useState(1);
+  // Edit mode: the event's stored status (draft / live / paused …).
+  const [eventStatus, setEventStatus] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitType, setSubmitType] = useState<'draft' | 'publish' | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -829,7 +687,9 @@ export const CreateExperience: React.FC = () => {
   const [showErrors, setShowErrors] = useState(false);
 
   // Admin-specific: the host the event is created on behalf of.
-  const [selectedHost, setSelectedHost] = useState<Host | null>(null);
+  const [selectedHost, setSelectedHost] = useState<
+    (Host & { avatarUrl?: string }) | null
+  >(null);
 
   // Image Crop states
   const [cropQueue, setCropQueue] = useState<File[]>([]);
@@ -908,60 +768,6 @@ export const CreateExperience: React.FC = () => {
       return { ...prev, customDatesList: list };
     });
   };
-
-  // Local string trackers for controlled numeric inputs to avoid leading-zero/clearing issues
-  const [priceInputStr, setPriceInputStr] = useState<string>(
-    form.isFree ? '' : (form.priceCents / 100).toString()
-  );
-  const [durationInputStr, setDurationInputStr] = useState<string>(
-    form.durationMinutes.toString()
-  );
-  const [minGroupInputStr, setMinGroupInputStr] = useState<string>(form.minGroupSize.toString());
-  const [maxGroupInputStr, setMaxGroupInputStr] = useState<string>(form.maxGroupSize.toString());
-
-  useEffect(() => {
-    if (form.isFree) {
-      setPriceInputStr('');
-    } else {
-      const formVal = form.priceCents / 100;
-      if (priceInputStr !== '' && parseFloat(priceInputStr) !== formVal) {
-        setPriceInputStr(formVal.toString());
-      } else if (priceInputStr === '' && formVal !== 0) {
-        setPriceInputStr(formVal.toString());
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.priceCents, form.isFree]);
-
-  useEffect(() => {
-    const formVal = form.durationMinutes;
-    if (durationInputStr !== '' && parseInt(durationInputStr) !== formVal) {
-      setDurationInputStr(formVal.toString());
-    } else if (durationInputStr === '' && formVal !== 0) {
-      setDurationInputStr(formVal.toString());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.durationMinutes]);
-
-  useEffect(() => {
-    const formVal = form.minGroupSize;
-    if (minGroupInputStr !== '' && parseInt(minGroupInputStr) !== formVal) {
-      setMinGroupInputStr(formVal.toString());
-    } else if (minGroupInputStr === '' && formVal !== 0) {
-      setMinGroupInputStr(formVal.toString());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.minGroupSize]);
-
-  useEffect(() => {
-    const formVal = form.maxGroupSize;
-    if (maxGroupInputStr !== '' && parseInt(maxGroupInputStr) !== formVal) {
-      setMaxGroupInputStr(formVal.toString());
-    } else if (maxGroupInputStr === '' && formVal !== 0) {
-      setMaxGroupInputStr(formVal.toString());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.maxGroupSize]);
 
   // Plain-text length of the rich-text description, for the char counter.
   const [descriptionTextLength, setDescriptionTextLength] = useState(0);
@@ -1073,11 +879,34 @@ export const CreateExperience: React.FC = () => {
           accessPasskey,
           passkeyGrantsFree: ev.passkey_grants_free,
         }));
-        setPriceInputStr(
-          ev.is_free ? '' : ((ev.price_cents ?? 0) / 100).toString(),
+        setEventStatus(ev.status ?? '');
+        // The editor only reports its length on change, so seed the counter.
+        setDescriptionTextLength(
+          new DOMParser().parseFromString(ev.description ?? '', 'text/html').body
+            .textContent?.length ?? 0,
         );
-        // Lock the host to the event's owner (host can't change on edit).
-        setSelectedHost({ id: ev.host_id, name: 'Existing host', city: '' } as Host);
+        // Lock the host to the event's owner (host can't change on edit), then
+        // fill in their real name and photo for the "Hosted by" card.
+        setSelectedHost({ id: ev.host_id, name: 'Host', city: '' } as Host);
+        if (ev.host_id) {
+          fetchHostDetail(ev.host_id)
+            .then((d) => {
+              if (cancelled) return;
+              const name =
+                `${d.host.first_name ?? ''} ${d.host.last_name ?? ''}`.trim() ||
+                d.user?.name ||
+                'Host';
+              setSelectedHost({
+                id: ev.host_id,
+                name,
+                city: d.host.city ?? d.user?.city ?? '',
+                avatarUrl: d.host.avatar_url,
+              } as Host & { avatarUrl?: string });
+            })
+            .catch(() => {
+              // Non-fatal: the card keeps the placeholder name.
+            });
+        }
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : 'Failed to load experience.',
@@ -1172,6 +1001,7 @@ export const CreateExperience: React.FC = () => {
 
   const handleGalleryUpload = (files: File[]) => {
     if (files.length > 0) {
+      setRecropIndex(null);
       setCropTarget('cover');
       setCropQueue(files);
     }
@@ -1185,47 +1015,126 @@ export const CreateExperience: React.FC = () => {
     });
 
     if (cropTarget === 'profile') {
+      if (form.coverImagePreview?.startsWith('blob:'))
+        URL.revokeObjectURL(form.coverImagePreview);
       updateForm('coverImage', croppedFile);
       updateForm('coverImagePreview', URL.createObjectURL(croppedFile));
     } else {
       const newPreview = URL.createObjectURL(croppedFile);
-      updateForm('galleryImages', [...form.galleryImages, croppedFile]);
-      updateForm('galleryPreviews', [...form.galleryPreviews, newPreview]);
+      const at = recropIndex;
+      setForm((prev) => {
+        const previews = [...prev.galleryPreviews];
+        if (at !== null && at < previews.length) {
+          // Re-crop: the new photo takes the old one's place.
+          const old = previews[at];
+          if (old?.startsWith('blob:')) URL.revokeObjectURL(old);
+          previews[at] = newPreview;
+        } else {
+          previews.push(newPreview);
+        }
+        return withGallery(prev, previews, { [newPreview]: croppedFile });
+      });
+      setRecropIndex(null);
     }
 
     // Move to next image in queue
     setCropQueue((prev) => prev.slice(1));
   };
 
+  // galleryPreviews is the gallery in display order: hosted https URLs mixed
+  // with blob: previews of new files. galleryImages holds those files in the
+  // same order as their blob previews, so save can upload them and put each
+  // URL back where its preview sat.
+  const withGallery = (
+    prev: FormData,
+    previews: string[],
+    added: Record<string, File> = {},
+  ): FormData => {
+    const fileByBlob: Record<string, File> = { ...added };
+    prev.galleryPreviews
+      .filter((p) => p.startsWith('blob:'))
+      .forEach((p, i) => {
+        const f = prev.galleryImages[i];
+        if (f && !fileByBlob[p]) fileByBlob[p] = f;
+      });
+    return {
+      ...prev,
+      galleryPreviews: previews,
+      galleryImages: previews
+        .filter((p) => p.startsWith('blob:'))
+        .map((p) => fileByBlob[p])
+        .filter((f): f is File => !!f),
+      existingGalleryUrls: previews.filter((p) => !p.startsWith('blob:')),
+    };
+  };
+
   const removeGalleryImage = (index: number) => {
-    // galleryPreviews is existingGalleryUrls (already-uploaded, order kept)
-    // followed by one blob preview per not-yet-uploaded galleryImages file. The
-    // preview index maps to one or the other depending on which half it lands in.
-    const existingCount = form.existingGalleryUrls.length;
     const preview = form.galleryPreviews[index];
     // Only blob: previews (freshly added files) own an object URL to revoke;
     // existing https URLs must not be revoked.
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
-
-    if (index < existingCount) {
-      // Removing an already-uploaded photo — drop it from existingGalleryUrls so
-      // it isn't re-added to gallery_urls on save (this was the deletion bug).
-      updateForm(
-        'existingGalleryUrls',
-        form.existingGalleryUrls.filter((_, i) => i !== index)
-      );
-    } else {
-      // Removing a newly added file — index into galleryImages past the existing ones.
-      const newIndex = index - existingCount;
-      updateForm(
-        'galleryImages',
-        form.galleryImages.filter((_, i) => i !== newIndex)
-      );
-    }
-    updateForm(
-      'galleryPreviews',
-      form.galleryPreviews.filter((_, i) => i !== index)
+    setForm((prev) =>
+      withGallery(
+        prev,
+        prev.galleryPreviews.filter((_, i) => i !== index),
+      ),
     );
+  };
+
+  // Re-crop an image that's already on the event: load it back into the 4:5
+  // cropper. S3 doesn't allow the admin origin to read images, so this goes
+  // through the website's image proxy when a direct fetch is blocked.
+  const [recropIndex, setRecropIndex] = useState<number | null>(null);
+  const [loadingRecrop, setLoadingRecrop] = useState<string | null>(null);
+  const loadForRecrop = async (url: string): Promise<File | null> => {
+    const name = decodeURIComponent(url.split('?')[0]?.split('/').pop() || 'image.jpg');
+    const proxied = `${SITE_PROXY}?url=${encodeURIComponent(url)}`;
+    // Local previews load directly; S3 never allows this origin, so go
+    // straight to the proxy; anything else tries directly first.
+    const attempts = url.startsWith('blob:')
+      ? [url]
+      : url.includes('.amazonaws.com/')
+        ? [proxied]
+        : [url, proxied];
+    for (const src of attempts) {
+      try {
+        const res = await fetch(src);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        if (!blob.type.startsWith('image/')) continue;
+        return new File([blob], name, { type: blob.type });
+      } catch {
+        // Blocked by CORS — try the proxy next.
+      }
+    }
+    return null;
+  };
+  const recropPoster = async () => {
+    const url = form.coverImagePreview;
+    if (!url) return;
+    setLoadingRecrop('poster');
+    const file = await loadForRecrop(url);
+    setLoadingRecrop(null);
+    if (!file) {
+      toast.error("Couldn't load this image to re-crop. Upload the original instead.");
+      return;
+    }
+    setCropTarget('profile');
+    setCropQueue([file]);
+  };
+  const recropGallery = async (index: number) => {
+    const url = form.galleryPreviews[index];
+    if (!url) return;
+    setLoadingRecrop(`gallery-${index}`);
+    const file = await loadForRecrop(url);
+    setLoadingRecrop(null);
+    if (!file) {
+      toast.error("Couldn't load this photo to re-crop. Upload the original instead.");
+      return;
+    }
+    setCropTarget('cover');
+    setRecropIndex(index);
+    setCropQueue([file]);
   };
 
   /* ---------------------------------------------------------------- */
@@ -1371,7 +1280,7 @@ export const CreateExperience: React.FC = () => {
         toast.error('Add a title before saving as draft');
         return;
       }
-    } else if (!validateStep2()) {
+    } else if (!validateStep1() || !validateStep2()) {
       return;
     }
     const hostId = selectedHost?.id;
@@ -1412,7 +1321,12 @@ export const CreateExperience: React.FC = () => {
       if (form.galleryImages.length > 0) {
         try {
           const uploadRes = await uploadFiles(form.galleryImages, 'events/gallery');
-          galleryUrls = [...galleryUrls, ...uploadRes.map((r) => r.url)];
+          // Put each uploaded URL back where its preview sat, so a re-cropped
+          // photo keeps its place in the gallery.
+          let k = 0;
+          galleryUrls = form.galleryPreviews
+            .map((p) => (p.startsWith('blob:') ? uploadRes[k++]?.url : p))
+            .filter((u): u is string => !!u);
         } catch (uploadErr) {
           console.warn('Gallery upload failed:', uploadErr);
         }
@@ -1554,8 +1468,7 @@ export const CreateExperience: React.FC = () => {
       };
 
       if (isEdit && editEventId) {
-        // Edit: update in place, then publish. The edit screen's only action is
-        // "Save changes", and a draft has no other way to go live from here.
+        // Edit: update in place, then publish unless "Save draft" was clicked.
         // publishEvent is a no-op server-side for events that aren't drafts, so
         // this promotes a draft to live without disturbing an already-live,
         // paused, or cancelled event.
@@ -1569,19 +1482,22 @@ export const CreateExperience: React.FC = () => {
           cover_image_url: coverImageUrl ?? '',
         });
         let publishFailed = false;
-        try {
-          await publishEvent(editEventId, hostId);
-        } catch (publishErr) {
-          publishFailed = true;
-          console.warn('Publish failed:', publishErr);
+        if (!asDraft) {
+          try {
+            await publishEvent(editEventId, hostId);
+            if (eventStatus === 'draft') setEventStatus('live');
+          } catch (publishErr) {
+            publishFailed = true;
+            console.warn('Publish failed:', publishErr);
+          }
         }
         setCreatedEventId(editEventId);
-        setSavedAsDraft(publishFailed);
+        setSavedAsDraft(asDraft || publishFailed);
         setShowSuccess(true);
         if (publishFailed) {
           toast.error('Saved, but publishing failed. The experience is still a draft — please try again.');
         } else {
-          toast.success('Experience updated successfully!');
+          toast.success(asDraft ? 'Draft saved' : 'Experience updated');
         }
       } else {
         const created = await createEvent({
@@ -1617,258 +1533,402 @@ export const CreateExperience: React.FC = () => {
   };
 
   /* ---------------------------------------------------------------- */
-  /*  Step Navigation                                                  */
+  /*  Delete (edit mode)                                               */
   /* ---------------------------------------------------------------- */
-  const goToStep2 = () => {
-    if (validateStep1()) {
-      setCurrentStep(2);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = async () => {
+    if (!editEventId || !selectedHost?.id) return;
+    setDeleting(true);
+    try {
+      await deleteEvent(editEventId, selectedHost.id);
+      toast.success('Experience deleted');
+      navigate('/experiences');
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : 'Failed to delete. Cancel active bookings first, then try again.',
+      );
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
-  const goToStep1 = () => {
-    setCurrentStep(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  // With an end time, a group session's length is just end minus start, so
+  // setting either time also sets the duration.
+  const setGroupTime = (key: 'eventTime' | 'endTime', value: string) =>
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (next.sessionType !== 'group' || !next.eventTime || !next.endTime) return next;
+      const [sh = 0, sm = 0] = next.eventTime.split(':').map(Number);
+      const [eh = 0, em = 0] = next.endTime.split(':').map(Number);
+      let mins = eh * 60 + em - (sh * 60 + sm);
+      if (mins <= 0) mins += 24 * 60; // ends after midnight
+      return mins >= 15 ? { ...next, durationMinutes: mins } : next;
+    });
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                           */
   /* ---------------------------------------------------------------- */
   if (loadingEvent) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0094CA] border-t-transparent" />
+      <div className="msm-dark flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#A020F0] border-t-transparent" />
       </div>
     );
   }
 
+  const err = (cond: boolean) => showErrors && cond;
+  const isOneOnOne = form.sessionType === 'one_on_one';
+  const isDraftEvent = isEdit && eventStatus === 'draft';
+  const publicUrl = `${SITE_URL}/experience/${form.slug || editEventId}`;
+  const hostName = selectedHost?.name ?? 'the host';
+
   return (
-    <>
-      <div className="mx-auto max-w-4xl pb-24">
+    <div className="msm-dark relative min-h-screen overflow-x-clip pb-24">
+      {/* Soft colour from the poster behind everything, like the event page */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+        {form.coverImagePreview ? (
+          <img
+            src={form.coverImagePreview}
+            alt=""
+            className="h-full w-full scale-125 object-cover opacity-40 blur-[90px]"
+          />
+        ) : (
+          <div className="absolute -top-40 left-1/3 h-[560px] w-[560px] rounded-full bg-[#7B2FFF]/20 blur-[140px]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#080914]/30 via-[#080914]/70 to-[#080914]" />
+      </div>
+
+      <div className="relative mx-auto max-w-[1120px] px-5 py-8 md:px-10">
         {/* Header */}
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-8 flex items-center gap-3">
           <button
             onClick={() => navigate('/experiences')}
-            className="rounded-lg p-2 transition hover:bg-gray-100"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white transition hover:bg-white/10"
+            aria-label="Back to experiences"
           >
-            <FiArrowLeft size={20} />
+            <FiArrowLeft size={18} />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEdit ? 'Edit Experience' : 'Create New Experience'}
+          <div className="min-w-0 flex-1">
+            <h1 className="font-outfit text-2xl font-bold text-white">
+              {isEdit ? 'Edit experience' : 'New experience'}
             </h1>
-            <p className="text-sm text-gray-500">
-              {isEdit
-                ? 'Update this experience'
-                : 'Create and publish an experience on behalf of a host'}
+            <p className="truncate text-sm text-white/50">
+              {selectedHost
+                ? `On behalf of ${hostName}${isEdit && !isDraftEvent ? ' · changes go live as soon as you save' : ''}`
+                : 'Pick the host this experience belongs to'}
             </p>
           </div>
+          {isEdit && eventStatus && (
+            <span
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                eventStatus === 'live'
+                  ? 'bg-emerald-400/15 text-emerald-300'
+                  : eventStatus === 'paused'
+                    ? 'bg-amber-400/15 text-amber-300'
+                    : 'bg-white/10 text-white/70'
+              }`}
+            >
+              {eventStatus}
+            </span>
+          )}
         </div>
 
-        <StepIndicator currentStep={currentStep} />
+        <div className="grid gap-8 lg:grid-cols-[420px_minmax(0,1fr)] lg:gap-12">
+          {/* Left — poster and host */}
+          <aside className="min-w-0 space-y-5 lg:sticky lg:top-6 lg:self-start">
+            <CoverPoster
+              preview={form.coverImagePreview}
+              title={form.title}
+              mood={form.mood}
+              isPrivate={form.isPrivate}
+              onUpload={handleCoverUpload}
+              onRemove={() => {
+                if (form.coverImagePreview?.startsWith('blob:'))
+                  URL.revokeObjectURL(form.coverImagePreview);
+                updateForm('coverImage', null);
+                updateForm('coverImagePreview', null);
+                // Clear the persisted URL too, otherwise save re-sends the old image.
+                updateForm('existingCoverUrl', null);
+              }}
+            />
+            <div className="flex items-start gap-3 px-1">
+              <p className="flex-1 text-xs leading-5 text-white/40">
+                Posters are cropped to 4:5, the frame guests see on the website.
+              </p>
+              {form.coverImagePreview && (
+                <button
+                  type="button"
+                  onClick={() => void recropPoster()}
+                  disabled={loadingRecrop !== null}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
+                >
+                  <FiCrop size={14} />
+                  {loadingRecrop === 'poster' ? 'Loading…' : 'Re-crop to 4:5'}
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div className="border-b border-white/[0.08] pb-2">
+                <h2 className="font-outfit text-base font-semibold text-white">Hosted by</h2>
+              </div>
+              <HostPicker
+                selectedHost={selectedHost}
+                locked={isEdit}
+                onSelect={setSelectedHost}
+                hasError={err(!selectedHost?.id)}
+              />
+            </div>
+          </aside>
 
-        {/* Step 1: The Basics */}
-        {currentStep === 1 && (
-          <div className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-gray-100 pb-4">
-              <h2 className="text-lg font-semibold text-gray-900">The Basics</h2>
-              <p className="text-sm text-gray-500">Tell us about the experience</p>
+          {/* Right — the event, editable */}
+          <div className="min-w-0 space-y-7">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => updateForm('isPrivate', !form.isPrivate)}
+                title="Tap to switch"
+                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:border-white/30"
+              >
+                {form.isPrivate ? (
+                  <LuLock className="h-3.5 w-3.5 text-[#D8B4FE]" />
+                ) : (
+                  <LuGlobe className="h-3.5 w-3.5 text-[#D8B4FE]" />
+                )}
+                {form.isPrivate ? 'Private event' : 'Public event'}
+              </button>
+              <div className="ml-auto w-full sm:w-auto">
+                <Segmented<'group' | 'one_on_one'>
+                  value={form.sessionType}
+                  onChange={(v) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      sessionType: v,
+                      // One-on-one slots come from availability windows; a
+                      // group event starts as a single date again.
+                      scheduleType: v === 'one_on_one' ? 'custom_dates' : 'one_time',
+                      isRecurring: false,
+                    }))
+                  }
+                  options={[
+                    { value: 'group', label: 'Group' },
+                    { value: 'one_on_one', label: '1:1' },
+                  ]}
+                />
+              </div>
             </div>
 
-            {/* Host — admin picks who this experience belongs to */}
-            <HostSelector
-              selectedHost={selectedHost}
-              onSelect={setSelectedHost}
-              hasError={showErrors && !selectedHost}
-            />
-
-            {/* Mood Selector — chosen first so the title typeahead can suggest matching templates */}
-            <MoodSelector
-              value={form.mood}
-              onChange={(v) => {
-                updateForm('mood', v);
-                // Reset prefilled title/hook so the new mood's templates surface cleanly.
-                if (v !== form.mood) {
-                  updateForm('title', '');
-                  updateForm('hookLine', '');
-                }
-              }}
-              hasError={showErrors && !form.mood}
-            />
-
-            {/* Title — typeahead filtered by mood-keyed templates */}
-            <TitleAutocomplete
-              mood={form.mood}
-              value={form.title}
-              onChange={(v) => updateForm('title', v)}
-              onSelectTemplate={(title, hookLine) => {
-                updateForm('title', title);
-                updateForm('hookLine', hookLine);
-              }}
-              hasError={showErrors && !form.title.trim()}
-            />
-
-            {/* URL slug — editable in edit mode, with a live duplicate check.
-                New experiences auto-generate a slug from the title server-side. */}
-            {isEdit && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  URL slug
-                </label>
-                <input
-                  type="text"
-                  value={form.slug}
-                  onChange={(e) =>
-                    updateForm(
-                      'slug',
-                      // Lenient while typing (keep a trailing hyphen so word
-                      // boundaries work); the server slugifies again on save.
-                      e.target.value
-                        .toLowerCase()
-                        .replace(/[^a-z0-9]+/g, '-')
-                        .replace(/^-+/, ''),
-                    )
-                  }
-                  placeholder="sunset-yoga-on-the-beach"
-                  className={`w-full rounded-lg border px-4 py-3 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                    slugStatus === 'taken' || slugStatus === 'invalid'
-                      ? 'border-red-500 bg-red-50'
-                      : 'border-gray-200 focus:border-transparent'
-                  }`}
-                />
-                <p className="text-xs text-gray-400">
-                  /experience/{form.slug || 'your-experience-slug'}
-                </p>
-                {slugStatus === 'checking' && (
-                  <p className="text-xs text-gray-400">Checking availability…</p>
-                )}
-                {slugStatus === 'available' && (
-                  <p className="text-xs text-green-600">This slug is available.</p>
-                )}
-                {slugStatus === 'taken' && (
-                  <p className="text-xs text-red-500">
-                    This slug is already in use — pick another.
-                  </p>
-                )}
-                {slugStatus === 'invalid' && (
-                  <p className="text-xs text-red-500">
-                    A slug is required.
-                  </p>
-                )}
-                <p className="text-xs text-amber-600">
-                  Changing this changes the experience&rsquo;s public URL. The old
-                  UUID link keeps working.
-                </p>
-              </div>
-            )}
-
-            {/* Hook Line */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Hook Line <span className="text-red-500">*</span>
-              </label>
+            {/* What */}
+            <section className="space-y-4">
+              <MoodSelector
+                kind={isOneOnOne ? 'session' : 'experience'}
+                value={form.mood}
+                onChange={(v) => updateForm('mood', v)}
+                hasError={err(!form.mood)}
+              />
+              <TitleField
+                mood={form.mood}
+                value={form.title}
+                onChange={(v) => updateForm('title', v)}
+                onSelectTemplate={(title, hookLine) => {
+                  updateForm('title', title);
+                  updateForm('hookLine', hookLine);
+                }}
+                hasError={err(!form.title.trim())}
+              />
               <input
                 type="text"
                 value={form.hookLine}
                 onChange={(e) => updateForm('hookLine', e.target.value)}
-                placeholder="A short catchy phrase to attract guests"
-                className={`w-full rounded-lg border px-4 py-3 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                  showErrors && !form.hookLine.trim()
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-gray-200 focus:border-transparent'
-                }`}
+                placeholder="A short tagline guests see under the name"
+                aria-label="Short tagline"
                 maxLength={150}
+                className={`${INLINE_FIELD} ${err(!form.hookLine.trim()) ? '!border-red-500/70' : ''}`}
+                style={{ backgroundColor: 'transparent' }}
               />
-              <p className="text-xs text-gray-400">{form.hookLine.length}/150 characters</p>
-            </div>
+            </section>
 
-            {/* Visuals Section */}
-            <div className="border-t border-gray-100 pt-6">
-              <h3 className="mb-4 text-base font-semibold text-gray-900">Visuals</h3>
-              <div className="grid gap-6 md:grid-cols-2">
-                <ImageUpload
-                  label="Profile Image"
-                  helpText="This will be the main profile image shown on cards"
-                  preview={form.coverImagePreview}
-                  onUpload={handleCoverUpload}
-                  onRemove={() => {
-                    if (form.coverImagePreview?.startsWith('blob:'))
-                      URL.revokeObjectURL(form.coverImagePreview);
-                    updateForm('coverImage', null);
-                    updateForm('coverImagePreview', null);
-                    // Clear the persisted URL too, otherwise save re-sends the old image.
-                    updateForm('existingCoverUrl', null);
-                  }}
-                />
-                <ImageUpload
-                  label="Cover Image"
-                  helpText="Add cover and gallery photos for the experience"
-                  multiple
-                  previews={form.galleryPreviews}
-                  onUpload={handleGalleryUpload}
-                  onRemoveMultiple={removeGalleryImage}
-                />
-              </div>
-            </div>
+            {/* When */}
+            <section className="space-y-3">
+              {!isOneOnOne &&
+                (form.scheduleType === 'one_time' || form.scheduleType === 'recurring') && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DatePill
+                      value={form.eventDate}
+                      onChange={(v) => updateForm('eventDate', v)}
+                      error={err(!form.eventDate)}
+                    />
+                    <TimePill
+                      value={form.eventTime}
+                      onChange={(v) => setGroupTime('eventTime', v)}
+                      placeholder="Start time"
+                      ariaLabel="Start time"
+                      error={err(!form.eventTime)}
+                    />
+                    <span className="text-white/35">to</span>
+                    <TimePill
+                      value={form.endTime}
+                      onChange={(v) => setGroupTime('endTime', v)}
+                      placeholder="End time"
+                      start={form.eventTime || undefined}
+                      ariaLabel="End time"
+                    />
+                  </div>
+                )}
 
-            {/* Logistics Section */}
-            <div className="border-t border-gray-100 pt-6">
-              <h3 className="mb-4 text-base font-semibold text-gray-900">Logistics</h3>
+              {!isOneOnOne && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {(
+                    [
+                      ['one_time', 'Just once'],
+                      ['recurring', 'Repeats'],
+                      ['custom_dates', 'Several dates'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <Chip
+                      key={key}
+                      active={form.scheduleType === key}
+                      onClick={() => {
+                        updateForm('scheduleType', key);
+                        updateForm('isRecurring', key === 'recurring');
+                      }}
+                    >
+                      {label}
+                    </Chip>
+                  ))}
+                  {form.scheduleType === 'recurring' && (
+                    <select
+                      value={form.recurrenceRule}
+                      onChange={(e) => updateForm('recurrenceRule', e.target.value)}
+                      className={INLINE_PICKER}
+                      style={{ backgroundColor: 'transparent' }}
+                      aria-label="How often it repeats"
+                    >
+                      <option value="">How often?</option>
+                      <option value="FREQ=DAILY">Daily</option>
+                      <option value="FREQ=WEEKLY">Weekly</option>
+                      <option value="FREQ=WEEKLY;INTERVAL=2">Every 2 weeks</option>
+                      <option value="FREQ=MONTHLY">Monthly</option>
+                      {form.recurrenceRule &&
+                        ![
+                          'FREQ=DAILY',
+                          'FREQ=WEEKLY',
+                          'FREQ=WEEKLY;INTERVAL=2',
+                          'FREQ=MONTHLY',
+                        ].includes(form.recurrenceRule) && (
+                          <option value={form.recurrenceRule}>
+                            Custom ({form.recurrenceRule})
+                          </option>
+                        )}
+                    </select>
+                  )}
+                </div>
+              )}
 
-              {/* Online/In-Person Toggle */}
-              <div className="mb-4">
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Experience Type
-                </label>
-                <div className="flex gap-2">
+              {!isOneOnOne && form.scheduleType === 'custom_dates' && (
+                <div className="space-y-2">
+                  {form.customDatesList.map((slot, idx) => (
+                    <div key={idx} className="flex flex-wrap items-center gap-2">
+                      <DatePill
+                        value={slot.date}
+                        onChange={(v) => updateCustomSlot(idx, 'date', v)}
+                        placeholder={`Date ${idx + 1}`}
+                      />
+                      <TimePill
+                        value={slot.time}
+                        onChange={(v) => updateCustomSlot(idx, 'time', v)}
+                        placeholder="Start time"
+                        ariaLabel={`Start time ${idx + 1}`}
+                      />
+                      {form.customDatesList.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeCustomSlot(idx)}
+                          className="p-1.5 text-white/40 transition hover:text-red-400"
+                          aria-label="Remove this date"
+                        >
+                          <FiX size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                   <button
                     type="button"
-                    onClick={() => updateForm('isOnline', false)}
-                    className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      !form.isOnline
-                        ? 'bg-[#0094CA] text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    onClick={addCustomSlot}
+                    className="px-2 text-sm font-medium text-[#D8B4FE] transition hover:text-white"
                   >
-                    <FiMapPin className="mr-2 inline" size={16} />
-                    In-Person
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateForm('isOnline', true)}
-                    className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      form.isOnline
-                        ? 'bg-[#0094CA] text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    🌐 Online
+                    + Add another date
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* Meeting Link (if online) */}
-              {form.isOnline && (
-                <div className="mb-4 space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Meeting Link</label>
+              {isOneOnOne && (
+                <SessionWindowsEditor
+                  windows={form.sessionWindows}
+                  onWindowsChange={(windows) => updateForm('sessionWindows', windows)}
+                  breakMinutes={form.breakMinutes}
+                  onBreakMinutesChange={(minutes) => updateForm('breakMinutes', minutes)}
+                  durationMinutes={form.durationMinutes}
+                  isWeekly={form.sessionIsWeekly}
+                  onIsWeeklyChange={(weekly) => updateForm('sessionIsWeekly', weekly)}
+                  showErrors={showErrors}
+                />
+              )}
+
+              {(isOneOnOne || form.scheduleType === 'custom_dates') && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-1 text-sm text-white/55">
+                    {isOneOnOne ? 'Each session' : 'Each date lasts'}
+                  </span>
+                  {DURATION_OPTIONS.map((mins) => (
+                    <Chip
+                      key={mins}
+                      active={form.durationMinutes === mins}
+                      onClick={() => updateForm('durationMinutes', mins)}
+                    >
+                      {minsLabel(mins)}
+                    </Chip>
+                  ))}
+                  <label className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-sm text-white/60">
+                    <NumberInput
+                      value={form.durationMinutes}
+                      min={15}
+                      onChange={(v) => updateForm('durationMinutes', v)}
+                      ariaLabel="Custom length in minutes"
+                      className="row-input w-12 bg-transparent text-right text-sm text-white outline-none"
+                    />
+                    min
+                  </label>
+                </div>
+              )}
+            </section>
+
+            {/* Location */}
+            <Section title="Location">
+              {form.isOnline ? (
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07]">
+                    <FiVideo className="h-5 w-5 text-[#D8B4FE]" />
+                  </span>
                   <input
                     type="url"
                     value={form.meetingLink}
                     onChange={(e) => updateForm('meetingLink', e.target.value)}
-                    placeholder="e.g., https://zoom.us/j/123456789"
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
+                    placeholder="Meeting link (Zoom, Google Meet…)"
+                    aria-label="Meeting link"
+                    className={INLINE_FIELD}
+                    style={{ backgroundColor: 'transparent' }}
                   />
-                  <p className="text-xs text-gray-500">
-                    Paste a Zoom, Google Meet, or other video conference link
-                  </p>
                 </div>
-              )}
-
-              {/* Location (if in-person) */}
-              {!form.isOnline && (
-                <div className="mb-4 space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Location</label>
-                  <div className="flex gap-2">
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07]">
+                      <FiMapPin className="h-5 w-5 text-[#D8B4FE]" />
+                    </span>
                     <LocationSearchInput
                       value={form.location}
                       onChange={(val) => updateForm('location', val)}
@@ -1876,1191 +1936,684 @@ export const CreateExperience: React.FC = () => {
                         updateForm('location', addr);
                         updateForm(
                           'googleMapsUrl',
-                          `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+                          `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
                         );
                       }}
-                      placeholder="Search for a location or locality..."
+                      placeholder="Search a place or area"
+                      className="!rounded-xl !border-transparent !bg-transparent !px-2 !text-[15px] !ring-0 hover:!bg-white/[0.04] focus:!bg-white/[0.06]"
                     />
                   </div>
-                </div>
-              )}
-
-              {/* Google Maps URL (if in-person) */}
-              {!form.isOnline && (
-                <div className="mb-4 space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Google Maps Link
-                  </label>
                   <input
                     type="url"
                     value={form.googleMapsUrl}
                     onChange={(e) => updateForm('googleMapsUrl', e.target.value)}
-                    placeholder="Auto-generated with exact coordinates"
-                    readOnly
-                    className="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
+                    placeholder="Google Maps link (fills in when you pick a place)"
+                    aria-label="Google Maps link"
+                    className={`${INLINE_FIELD} !text-sm !text-white/60`}
+                    style={{ backgroundColor: 'transparent' }}
                   />
-                  <p className="text-xs text-gray-500">
-                    Auto-filled with exact location coordinates from the search above
-                  </p>
-                </div>
+                </>
               )}
+              <button
+                type="button"
+                onClick={() => updateForm('isOnline', !form.isOnline)}
+                className="px-2 text-sm font-medium text-white/50 transition hover:text-white"
+              >
+                {form.isOnline ? 'Meeting in person instead?' : 'Hosting it online instead?'}
+              </button>
+            </Section>
 
-              {/* Duration */}
-              <div className="mb-4 space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Duration (minutes)
-                </label>
-                <div className="space-y-3">
-                  {/* Quick Select Buttons */}
+            {/* About */}
+            <Section title="About the event">
+              <RichTextEditor
+                value={form.description}
+                onChange={(html) => updateForm('description', html)}
+                onLengthChange={setDescriptionTextLength}
+                placeholder="Describe what guests will experience..."
+                maxLength={2000}
+                error={err(!form.description.trim())}
+              />
+              <p className="px-1 text-right text-xs text-white/35">
+                {descriptionTextLength}/2000
+              </p>
+            </Section>
+
+            {/* Tickets */}
+            <Section title={isOneOnOne ? 'Price' : 'Tickets'}>
+              {!isOneOnOne && (
+                <Rows>
+                  <Row label="Slots">
+                    <NumberInput
+                      value={form.maxGroupSize}
+                      min={1}
+                      onChange={(v) => updateForm('maxGroupSize', v)}
+                      ariaLabel="Slots"
+                    />
+                  </Row>
+                </Rows>
+              )}
+              <Segmented<'paid' | 'free'>
+                value={form.isFree ? 'free' : 'paid'}
+                onChange={(v) => updateForm('isFree', v === 'free')}
+                options={[
+                  { value: 'paid', label: 'Paid' },
+                  { value: 'free', label: 'Free' },
+                ]}
+              />
+              {!form.isFree && !form.useTiers && (
+                <Rows>
+                  <Row label="Price per person (₹)" error={err(form.priceCents <= 0)}>
+                    <NumberInput
+                      value={form.priceCents / 100}
+                      decimal
+                      onChange={(v) => updateForm('priceCents', Math.round(v * 100))}
+                      ariaLabel="Price per person"
+                    />
+                  </Row>
+                </Rows>
+              )}
+            </Section>
+
+            {/* Everything optional, folded away */}
+            <Section title="More options" hint="All optional. Open one to change it.">
+              <div>
+                <MoreOptions
+                  title="Who can see it"
+                  summary={
+                    form.isPrivate
+                      ? form.privateAccessMode === 'rsvp'
+                        ? 'Private · request to join'
+                        : 'Private · passkey'
+                      : 'Public'
+                  }
+                  defaultOpen={form.isPrivate}
+                >
+                  <Segmented<'public' | 'private'>
+                    value={form.isPrivate ? 'private' : 'public'}
+                    onChange={(v) => updateForm('isPrivate', v === 'private')}
+                    options={[
+                      { value: 'public', label: 'Public' },
+                      { value: 'private', label: 'Private' },
+                    ]}
+                  />
+                  {form.isPrivate && (
+                    <div className="space-y-4">
+                      <p className="px-1 text-xs leading-5 text-white/45">
+                        Still shown in discovery with a lock. Guests need a way in to book.
+                      </p>
+                      <Segmented<'passkey' | 'rsvp'>
+                        value={form.privateAccessMode}
+                        onChange={(v) => updateForm('privateAccessMode', v)}
+                        options={[
+                          { value: 'passkey', label: 'Unlock with a code' },
+                          { value: 'rsvp', label: 'Request to join' },
+                        ]}
+                      />
+                      {form.privateAccessMode === 'rsvp' ? (
+                        <div className="space-y-1.5 rounded-2xl border border-white/[0.06] bg-[#131328] px-4 py-3.5 text-sm text-white/70">
+                          <p>
+                            Guests apply with their details and the host approves. Requests
+                            show in the host dashboard and in Join requests here.
+                          </p>
+                          <p className="text-xs text-amber-300/90">
+                            Needs guest details: turn them on below and pick at least one field.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <Segmented<'shared' | 'unique'>
+                            value={form.accessMode}
+                            onChange={(v) => updateForm('accessMode', v)}
+                            options={[
+                              { value: 'shared', label: 'One passkey' },
+                              { value: 'unique', label: 'Code per guest' },
+                            ]}
+                          />
+                          {form.accessMode === 'shared' ? (
+                            <Rows>
+                              <Row
+                                label="Passkey"
+                                error={err(!form.accessPasskey.trim())}
+                              >
+                                <input
+                                  type="text"
+                                  value={form.accessPasskey}
+                                  onChange={(e) => updateForm('accessPasskey', e.target.value)}
+                                  placeholder="e.g. SUMMER24"
+                                  className={ROW_INPUT}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateForm(
+                                      'accessPasskey',
+                                      Math.random().toString(36).slice(2, 8).toUpperCase(),
+                                    )
+                                  }
+                                  className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/15"
+                                >
+                                  Generate
+                                </button>
+                              </Row>
+                            </Rows>
+                          ) : (
+                            <p className="px-1 text-sm text-white/60">
+                              Each guest gets a single-use code that unlocks booking.{' '}
+                              {isEdit
+                                ? 'Generate them below.'
+                                : 'Save the experience first, then generate them here.'}
+                            </p>
+                          )}
+                        </>
+                      )}
+                      {isEdit && editEventId && selectedHost?.id && (
+                        <CouponsManager
+                          eventId={editEventId}
+                          hostId={selectedHost.id}
+                          kind="access"
+                        />
+                      )}
+                    </div>
+                  )}
+                </MoreOptions>
+
+                <MoreOptions
+                  title="Refunds"
+                  summary={
+                    CANCELLATION_POLICIES.find((p) => p.value === form.cancellationPolicy)
+                      ?.label ?? ''
+                  }
+                >
+                  <Rows>
+                    {CANCELLATION_POLICIES.map((p) => {
+                      const on = form.cancellationPolicy === p.value;
+                      return (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => updateForm('cancellationPolicy', p.value)}
+                          className="flex min-h-[56px] w-full items-center gap-3 py-2.5 text-left"
+                        >
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                              on ? 'border-[#B57BFF]' : 'border-white/25'
+                            }`}
+                          >
+                            {on && <span className={`h-2.5 w-2.5 rounded-full ${GRADIENT}`} />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-white">
+                              {p.label}
+                            </span>
+                            <span className="block text-xs text-white/45">{p.description}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </Rows>
+                </MoreOptions>
+
+                {!form.isFree && (
+                  <MoreOptions
+                    title="Ticket types & monthly pass"
+                    summary={
+                      form.useTiers
+                        ? `${form.priceTiers.length} ticket types`
+                        : form.monthlyPassEnabled
+                          ? 'One price · pass on'
+                          : 'One price'
+                    }
+                  >
+                    <Segmented<'single' | 'tiers'>
+                      value={form.useTiers ? 'tiers' : 'single'}
+                      onChange={(v) => updateForm('useTiers', v === 'tiers')}
+                      options={[
+                        { value: 'single', label: 'Single price' },
+                        { value: 'tiers', label: 'Multiple ticket types' },
+                      ]}
+                    />
+                    {form.useTiers && (
+                      <div className="space-y-2">
+                        {form.priceTiers.map((tier, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={tier.name}
+                              onChange={(e) => updatePriceTier(index, 'name', e.target.value)}
+                              placeholder="Ticket name, e.g. VIP"
+                              className={`${FIELD} !py-2.5`}
+                            />
+                            <input
+                              type="number"
+                              min={0}
+                              value={tier.priceStr}
+                              onChange={(e) =>
+                                updatePriceTier(index, 'priceStr', e.target.value)
+                              }
+                              placeholder="₹ Price"
+                              className={`${FIELD} !w-32 !py-2.5`}
+                            />
+                            {form.priceTiers.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removePriceTier(index)}
+                                className="p-1.5 text-white/40 transition hover:text-red-400"
+                                aria-label="Remove ticket type"
+                              >
+                                <FiX className="h-5 w-5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <AddPill onClick={addPriceTier}>Add another ticket type</AddPill>
+                      </div>
+                    )}
+                    <ToggleRow
+                      label="Monthly pass"
+                      hint={
+                        form.scheduleType === 'one_time'
+                          ? 'Repeating or several-dates events only.'
+                          : 'Guests pay once and attend for 30 days.'
+                      }
+                      checked={form.monthlyPassEnabled}
+                      disabled={form.scheduleType === 'one_time'}
+                      onChange={(next) => updateForm('monthlyPassEnabled', next)}
+                    />
+                    {form.monthlyPassEnabled && form.scheduleType !== 'one_time' && (
+                      <Rows>
+                        <Row
+                          label="Pass price (₹)"
+                          error={err(Number(form.monthlyPassPriceStr) <= 0)}
+                        >
+                          <input
+                            type="number"
+                            min={1}
+                            value={form.monthlyPassPriceStr}
+                            onChange={(e) => updateForm('monthlyPassPriceStr', e.target.value)}
+                            placeholder="2500"
+                            className={ROW_INPUT}
+                          />
+                        </Row>
+                        <Row label="Sessions included">
+                          <input
+                            type="number"
+                            min={1}
+                            value={form.monthlyPassSessionsStr}
+                            onChange={(e) =>
+                              updateForm('monthlyPassSessionsStr', e.target.value)
+                            }
+                            placeholder="All"
+                            className={ROW_INPUT}
+                          />
+                        </Row>
+                        <Row label="Passes available">
+                          <input
+                            type="number"
+                            min={1}
+                            value={form.monthlyPassCapacityStr}
+                            onChange={(e) =>
+                              updateForm('monthlyPassCapacityStr', e.target.value)
+                            }
+                            placeholder="Unlimited"
+                            className={ROW_INPUT}
+                          />
+                        </Row>
+                      </Rows>
+                    )}
+                  </MoreOptions>
+                )}
+
+                {isEdit && editEventId && selectedHost?.id && !form.isFree && (
+                  <MoreOptions title="Coupons & free codes" summary="Discounts and comps">
+                    <CouponsManager
+                      eventId={editEventId}
+                      hostId={selectedHost.id}
+                      kind="discount"
+                    />
+                    <CouponsManager eventId={editEventId} hostId={selectedHost.id} kind="free" />
+                  </MoreOptions>
+                )}
+
+                <MoreOptions
+                  title="More photos"
+                  summary={
+                    form.galleryPreviews.length ? `${form.galleryPreviews.length} added` : 'None'
+                  }
+                >
+                  <GalleryUpload
+                    previews={form.galleryPreviews}
+                    onUpload={handleGalleryUpload}
+                    onRemove={removeGalleryImage}
+                    onRecrop={(i) => void recropGallery(i)}
+                    recropping={
+                      loadingRecrop?.startsWith('gallery-')
+                        ? Number(loadingRecrop.slice(8))
+                        : null
+                    }
+                  />
+                </MoreOptions>
+
+                {!isOneOnOne && (
+                  <MoreOptions
+                    title="Group size"
+                    summary={`${form.minGroupSize}–${form.maxGroupSize} guests`}
+                  >
+                    <Rows>
+                      <Row label="Minimum to run">
+                        <NumberInput
+                          value={form.minGroupSize}
+                          min={1}
+                          onChange={(v) => updateForm('minGroupSize', v)}
+                          ariaLabel="Minimum guests"
+                        />
+                      </Row>
+                      <Row label="Maximum (slots)">
+                        <NumberInput
+                          value={form.maxGroupSize}
+                          min={Math.max(1, form.minGroupSize)}
+                          onChange={(v) => updateForm('maxGroupSize', v)}
+                          ariaLabel="Maximum guests"
+                        />
+                      </Row>
+                    </Rows>
+                    {(isOneOnOne || form.scheduleType !== 'custom_dates') &&
+                      !(form.eventTime && form.endTime) && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="mr-1 text-sm text-white/55">Lasts</span>
+                          {DURATION_OPTIONS.map((mins) => (
+                            <Chip
+                              key={mins}
+                              active={form.durationMinutes === mins}
+                              onClick={() => updateForm('durationMinutes', mins)}
+                            >
+                              {minsLabel(mins)}
+                            </Chip>
+                          ))}
+                        </div>
+                      )}
+                  </MoreOptions>
+                )}
+
+                <MoreOptions
+                  title="Languages & level"
+                  summary={[form.languages.join(', '), form.level].filter(Boolean).join(' · ')}
+                >
                   <div className="flex flex-wrap gap-2">
-                    {DURATION_OPTIONS.map((mins) => (
-                      <button
-                        key={mins}
-                        type="button"
-                        onClick={() => updateForm('durationMinutes', mins)}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                          form.durationMinutes === mins
-                            ? 'bg-[#0094CA] text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                    {[
+                      ...LANGUAGE_OPTIONS,
+                      ...form.languages.filter((l) => !LANGUAGE_OPTIONS.includes(l)),
+                    ].map((lang) => (
+                      <Chip
+                        key={lang}
+                        active={form.languages.includes(lang)}
+                        onClick={() => toggleLanguage(lang)}
                       >
-                        {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
-                      </button>
+                        {lang}
+                      </Chip>
                     ))}
                   </div>
-                  {/* Custom Input */}
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      inputMode="numeric"
-                      value={durationInputStr}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || /^\d*$/.test(val)) {
-                          setDurationInputStr(val);
-                          if (val === '') {
-                            updateForm('durationMinutes', 0);
-                          } else {
-                            const parsed = parseInt(val, 10);
-                            if (!isNaN(parsed)) {
-                              updateForm('durationMinutes', parsed);
-                            }
-                          }
+                      value={customLanguage}
+                      onChange={(e) => setCustomLanguage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addCustomLanguage();
                         }
                       }}
-                      onBlur={() => {
-                        const parsed = parseInt(durationInputStr, 10);
-                        if (isNaN(parsed) || parsed < 15) {
-                          setDurationInputStr('15');
-                          updateForm('durationMinutes', 15);
-                        } else {
-                          setDurationInputStr(parsed.toString());
-                          updateForm('durationMinutes', parsed);
-                        }
-                      }}
-                      className="flex-1 rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                      placeholder="Enter custom duration"
+                      placeholder="Another language"
+                      className={`${FIELD} !py-2.5`}
                     />
-                    <span className="text-sm font-medium text-gray-600">min</span>
+                    <button
+                      type="button"
+                      onClick={addCustomLanguage}
+                      className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+                    >
+                      Add
+                    </button>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    Click quick options or enter custom duration (minimum 15 min)
-                  </p>
-                </div>
-              </div>
-
-              {/* Group Size */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Min Group Size</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={minGroupInputStr}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*$/.test(val)) {
-                        setMinGroupInputStr(val);
-                        if (val === '') {
-                          updateForm('minGroupSize', 0);
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          if (!isNaN(parsed)) {
-                            updateForm('minGroupSize', parsed);
-                          }
-                        }
-                      }
-                    }}
-                    onBlur={() => {
-                      const parsed = parseInt(minGroupInputStr, 10);
-                      if (isNaN(parsed) || parsed < 1) {
-                        setMinGroupInputStr('1');
-                        updateForm('minGroupSize', 1);
-                      } else {
-                        setMinGroupInputStr(parsed.toString());
-                        updateForm('minGroupSize', parsed);
-                      }
-                    }}
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Max Group Size</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={maxGroupInputStr}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || /^\d*$/.test(val)) {
-                        setMaxGroupInputStr(val);
-                        if (val === '') {
-                          updateForm('maxGroupSize', 0);
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          if (!isNaN(parsed)) {
-                            updateForm('maxGroupSize', parsed);
-                          }
-                        }
-                      }
-                    }}
-                    onBlur={() => {
-                      const parsed = parseInt(maxGroupInputStr, 10);
-                      const minVal = form.minGroupSize || 1;
-                      if (isNaN(parsed) || parsed < minVal) {
-                        setMaxGroupInputStr(minVal.toString());
-                        updateForm('maxGroupSize', minVal);
-                      } else {
-                        setMaxGroupInputStr(parsed.toString());
-                        updateForm('maxGroupSize', parsed);
-                      }
-                    }}
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                  />
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">
-                <span className="font-medium">Max group size</span> = total spots that can book
-                this session (the event capacity).
-              </p>
-
-              {/* Languages */}
-              <div className="mt-4 space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Languages</label>
-                <p className="text-xs text-gray-500">
-                  Pick every language this experience is conducted in.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {LANGUAGE_OPTIONS.map((lang) => {
-                    const selected = form.languages.includes(lang);
-                    return (
-                      <button
-                        key={lang}
-                        type="button"
-                        onClick={() => toggleLanguage(lang)}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                          selected
-                            ? 'bg-[#0094CA] text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                  <div className="flex flex-wrap gap-2">
+                    {LEVEL_OPTIONS.map((lvl) => (
+                      <Chip
+                        key={lvl}
+                        active={form.level === lvl}
+                        onClick={() => updateForm('level', form.level === lvl ? '' : lvl)}
                       >
-                        {lang}
-                      </button>
-                    );
-                  })}
-                  {/* Custom languages already added */}
-                  {form.languages
-                    .filter((l) => !LANGUAGE_OPTIONS.includes(l))
-                    .map((lang) => (
-                      <button
-                        key={lang}
-                        type="button"
-                        onClick={() => toggleLanguage(lang)}
-                        className="flex items-center gap-1.5 rounded-lg bg-[#0094CA] px-4 py-2 text-sm font-medium text-white transition"
-                      >
-                        {lang}
-                        <span className="text-white/80">✕</span>
-                      </button>
+                        {lvl}
+                      </Chip>
                     ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={customLanguage}
-                    onChange={(e) => setCustomLanguage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addCustomLanguage();
-                      }
-                    }}
-                    placeholder="Other language…"
-                    className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                  />
-                  <button
-                    type="button"
-                    onClick={addCustomLanguage}
-                    className="rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Level */}
-              <div className="mt-4 space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Level</label>
-                <div className="flex flex-wrap gap-2">
-                  {LEVEL_OPTIONS.map((lvl) => (
-                    <button
-                      key={lvl}
-                      type="button"
-                      onClick={() => updateForm('level', lvl)}
-                      className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                        form.level === lvl
-                          ? 'bg-[#0094CA] text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {lvl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="mt-2 space-y-2">
-                <div className="flex items-start justify-between">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Description <span className="text-red-500">*</span>
-                  </label>
-                </div>
-                <RichTextEditor
-                  value={form.description}
-                  onChange={(html) => updateForm('description', html)}
-                  onLengthChange={setDescriptionTextLength}
-                  placeholder="Describe what guests will experience, what they'll learn, and what makes this experience special..."
-                  maxLength={2000}
-                  error={showErrors && !form.description.trim()}
-                />
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-gray-400">{descriptionTextLength}/2000 characters</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 1 footer — draft save + continue */}
-            <div className="flex flex-col sm:flex-row gap-4 border-t border-gray-100 pt-6">
-              <button
-                onClick={() => void handleSubmit(true)}
-                disabled={isSubmitting}
-                className="flex flex-1 items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white py-3.5 px-6 font-semibold text-gray-700 transition duration-300 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitType === 'draft' ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-500 border-t-transparent" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Save as Draft</span>
-                )}
-              </button>
-              <button
-                onClick={goToStep2}
-                disabled={isSubmitting}
-                className="flex flex-1 items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#0094CA] via-[#00a6e2] to-[#00bde5] py-3.5 px-6 font-bold text-white shadow-md shadow-[#0094CA]/15 transition-all duration-300 hover:shadow-lg hover:shadow-[#0094CA]/25 hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span>Continue to Schedule & Pricing</span>
-                <FiArrowRight size={16} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Schedule & Pricing */}
-        {currentStep === 2 && (
-          <div className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-gray-100 pb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Schedule & Pricing</h2>
-              <p className="text-sm text-gray-500">Set when and how much</p>
-            </div>
-
-              {/* Pricing Section */}
-              <div className="space-y-4">
-                <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                  <span className="inline-flex h-4 w-4 items-center justify-center text-sm leading-none font-bold">
-                    ₹
-                  </span>{' '}
-                  Pricing
-                </h3>
-
-                {/* Free/Paid Toggle */}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateForm('isFree', false)}
-                    className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition ${
-                      !form.isFree
-                        ? 'bg-[#0094CA] text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Paid Experience
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateForm('isFree', true)}
-                    className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition ${
-                      form.isFree
-                        ? 'bg-[#0094CA] text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Free Experience
-                  </button>
-                </div>
-
-                {/* Pricing mode: single price vs. multiple ticket types */}
-                {!form.isFree && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => updateForm('useTiers', false)}
-                      className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                        !form.useTiers
-                          ? 'bg-[#0094CA] text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Single price
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateForm('useTiers', true)}
-                      className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                        form.useTiers
-                          ? 'bg-[#0094CA] text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Multiple ticket types
-                    </button>
                   </div>
-                )}
+                </MoreOptions>
 
-                {/* Single Price Input */}
-                {!form.isFree && !form.useTiers && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Price per person (₹)
-                    </label>
-                    <div className="relative">
-                      <span className="absolute top-1/2 left-4 -translate-y-1/2 text-gray-500">
-                        ₹
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={priceInputStr}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                            setPriceInputStr(val);
-                            if (val === '') {
-                              updateForm('priceCents', 0);
-                            } else {
-                              const parsed = parseFloat(val);
-                              if (!isNaN(parsed)) {
-                                updateForm('priceCents', Math.round(parsed * 100));
-                              }
-                            }
-                          }
-                        }}
-                        onBlur={() => {
-                          const parsed = parseFloat(priceInputStr);
-                          if (isNaN(parsed) || parsed < 0) {
-                            setPriceInputStr('0');
-                            updateForm('priceCents', 0);
-                          } else {
-                            setPriceInputStr(parsed.toString());
-                            updateForm('priceCents', Math.round(parsed * 100));
-                          }
-                        }}
-                        className={`w-full rounded-lg border py-3 pr-4 pl-8 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                          showErrors && !form.isFree && form.priceCents <= 0
-                            ? 'border-red-500 bg-red-50'
-                            : 'border-gray-200 focus:border-transparent'
-                        }`}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Ticket Tier Editor */}
-                {!form.isFree && form.useTiers && (
-                  <div className="space-y-3">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Ticket types
-                    </label>
-                    {form.priceTiers.map((tier, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <input
-                          type="text"
-                          value={tier.name}
-                          onChange={(e) =>
-                            updatePriceTier(index, 'name', e.target.value)
-                          }
-                          placeholder="e.g. General, VIP"
-                          className={`flex-1 rounded-lg border px-3 py-2.5 text-sm transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                            showErrors && !tier.name.trim()
-                              ? 'border-red-500 bg-red-50'
-                              : 'border-gray-200 focus:border-transparent'
-                          }`}
-                        />
-                        <div className="relative w-32">
-                          <span className="absolute top-1/2 left-3 -translate-y-1/2 text-gray-500">
-                            ₹
-                          </span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={tier.priceStr}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                updatePriceTier(index, 'priceStr', val);
-                              }
-                            }}
-                            placeholder="Price"
-                            className={`w-full rounded-lg border py-2.5 pr-3 pl-7 text-sm transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                              showErrors && !(Number(tier.priceStr) > 0)
-                                ? 'border-red-500 bg-red-50'
-                                : 'border-gray-200 focus:border-transparent'
-                            }`}
-                          />
-                        </div>
-                        {form.priceTiers.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removePriceTier(index)}
-                            className="mt-1.5 text-gray-400 transition hover:text-red-500"
-                            aria-label="Remove ticket type"
-                          >
-                            <FiX size={18} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={addPriceTier}
-                      className="text-sm font-semibold text-[#0094CA] hover:underline"
-                    >
-                      + Add ticket type
-                    </button>
-                    <p className="text-xs text-gray-500">
-                      Guests pick one ticket type when booking.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-
-              {/* Monthly Pass — one payment covers a month of sessions. */}
-              {!form.isFree && (
-                <div className="space-y-4 border-t border-gray-100 pt-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Monthly Pass</h3>
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        Guests pay once and attend for 30 days. Recurring experiences only.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={form.scheduleType === 'one_time'}
-                      onClick={() => updateForm('monthlyPassEnabled', !form.monthlyPassEnabled)}
-                      className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-medium transition disabled:opacity-40 ${
-                        form.monthlyPassEnabled
-                          ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA]'
-                          : 'border-gray-200 bg-white text-gray-700'
-                      }`}
-                    >
-                      {form.monthlyPassEnabled ? 'On' : 'Off'}
-                    </button>
-                  </div>
-
-                  {form.scheduleType === 'one_time' && (
-                    <p className="text-xs text-gray-500">
-                      Pick a recurring or multi-date schedule below to offer a pass.
-                    </p>
-                  )}
-
-                  {form.monthlyPassEnabled && form.scheduleType !== 'one_time' && (
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-gray-700">
-                          Pass price (₹)
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={form.monthlyPassPriceStr}
-                          onChange={(e) => updateForm('monthlyPassPriceStr', e.target.value)}
-                          placeholder="2500"
-                          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-gray-700">
-                          Sessions included
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={form.monthlyPassSessionsStr}
-                          onChange={(e) => updateForm('monthlyPassSessionsStr', e.target.value)}
-                          placeholder="All"
-                          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-gray-700">
-                          Passes available
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={form.monthlyPassCapacityStr}
-                          onChange={(e) => updateForm('monthlyPassCapacityStr', e.target.value)}
-                          placeholder="Unlimited"
-                          className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Availability Section */}
-              <div className="space-y-4 border-t border-gray-100 pt-6">
-                <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                  <FiCalendar /> Availability & Schedule
-                </h3>
-
-                {/* Schedule Type Selection Tabs */}
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateForm('scheduleType', 'one_time');
-                      updateForm('isRecurring', false);
-                      updateForm('sessionType', 'group');
-                    }}
-                    className={`rounded-xl border p-3.5 text-left transition ${
-                      form.sessionType === 'group' && form.scheduleType === 'one_time'
-                        ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">One-Time Event</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Single specific date & time</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateForm('scheduleType', 'recurring');
-                      updateForm('isRecurring', true);
-                      updateForm('sessionType', 'group');
-                    }}
-                    className={`rounded-xl border p-3.5 text-left transition ${
-                      form.sessionType === 'group' && form.scheduleType === 'recurring'
-                        ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">Recurring</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Repeats daily, weekly, or monthly</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateForm('scheduleType', 'custom_dates');
-                      updateForm('isRecurring', false);
-                      updateForm('sessionType', 'group');
-                    }}
-                    className={`rounded-xl border p-3.5 text-left transition ${
-                      form.sessionType === 'group' && form.scheduleType === 'custom_dates'
-                        ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">Custom Dates (X, Y, Z)</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Pick dynamic dates (e.g. Aug 15, 22, Sept 5)</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // One-on-one slots come from the host's availability
-                      // windows: weekly ones repeat, dated ones expand into
-                      // custom_dates. The mode is picked inside the editor.
-                      updateForm('sessionType', 'one_on_one');
-                      updateForm('scheduleType', 'custom_dates');
-                      updateForm('isRecurring', false);
-                    }}
-                    className={`rounded-xl border p-3.5 text-left transition ${
-                      form.sessionType === 'one_on_one'
-                        ? 'border-[#0094CA] bg-[#0094CA]/5 text-[#0094CA] font-semibold'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">One-on-One</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Set the hours, we split them into 1:1 slots</div>
-                  </button>
-                </div>
-
-                {/* Standard One-Time & Recurring Inputs */}
-                {form.sessionType === 'group' &&
-                  (form.scheduleType === 'one_time' || form.scheduleType === 'recurring') && (
-                  <>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={form.eventDate}
-                          onChange={(e) => updateForm('eventDate', e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
-                          className={`w-full rounded-lg border px-4 py-3 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                            showErrors && !form.eventDate
-                              ? 'border-red-500 bg-red-50'
-                              : 'border-gray-200 focus:border-transparent'
-                          }`}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Start Time <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="time"
-                          value={form.eventTime}
-                          onChange={(e) => updateForm('eventTime', e.target.value)}
-                          className={`w-full rounded-lg border px-4 py-3 transition outline-none focus:ring-2 focus:ring-[#0094CA] ${
-                            showErrors && !form.eventTime
-                              ? 'border-red-500 bg-red-50'
-                              : 'border-gray-200 focus:border-transparent'
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        End Time (optional)
-                      </label>
-                      <input
-                        type="time"
-                        value={form.endTime}
-                        onChange={(e) => updateForm('endTime', e.target.value)}
-                        className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Leave empty to auto-calculate based on duration
-                      </p>
-                    </div>
-
-                    {form.scheduleType === 'recurring' && (
-                      <div className="space-y-2 rounded-xl bg-gray-50 p-4 border border-gray-200">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Recurrence Frequency <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={form.recurrenceRule}
-                          onChange={(e) => updateForm('recurrenceRule', e.target.value)}
-                          className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                        >
-                          <option value="">Select frequency</option>
-                          <option value="FREQ=DAILY">Daily</option>
-                          <option value="FREQ=WEEKLY">Weekly</option>
-                          <option value="FREQ=WEEKLY;INTERVAL=2">Every 2 weeks</option>
-                          <option value="FREQ=MONTHLY">Monthly</option>
-                        </select>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Dynamic Custom Selected Dates (X, Y, Z) Inputs */}
-                {form.sessionType === 'group' && form.scheduleType === 'custom_dates' && (
-                  <div className="space-y-4 rounded-xl border border-[#0094CA]/30 bg-[#0094CA]/5 p-5">
-                    <div>
-                      <h4 className="font-semibold text-gray-900 text-sm">Selected Specific Dates & Times</h4>
-                      <p className="text-xs text-gray-500">
-                        Add the specific dates ($X, Y, Z$) when this experience will take place.
-                      </p>
-                    </div>
-
-                    {form.customDatesList.map((slot, idx) => (
-                      <div key={idx} className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                        <div className="flex-1 min-w-[150px]">
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
-                          <input
-                            type="date"
-                            value={slot.date}
-                            onChange={(e) => updateCustomSlot(idx, 'date', e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
-                            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0094CA]"
-                          />
-                        </div>
-                        <div className="w-36 min-w-[120px]">
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Start Time</label>
-                          <input
-                            type="time"
-                            value={slot.time}
-                            onChange={(e) => updateCustomSlot(idx, 'time', e.target.value)}
-                            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0094CA]"
-                          />
-                        </div>
-                        {form.customDatesList.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeCustomSlot(idx)}
-                            className="mt-5 p-2 text-gray-400 hover:text-red-500 transition"
-                            title="Remove slot"
-                          >
-                            <FiX size={18} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={addCustomSlot}
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0094CA] hover:underline"
-                    >
-                      + Add Another Date (X, Y, Z)
-                    </button>
-                  </div>
-                )}
-
-                {form.sessionType === 'one_on_one' && (
-                  <SessionWindowsEditor
-                    windows={form.sessionWindows}
-                    onWindowsChange={(windows) => updateForm('sessionWindows', windows)}
-                    breakMinutes={form.breakMinutes}
-                    onBreakMinutesChange={(minutes) => updateForm('breakMinutes', minutes)}
-                    durationMinutes={form.durationMinutes}
-                    isWeekly={form.sessionIsWeekly}
-                    onIsWeeklyChange={(weekly) => updateForm('sessionIsWeekly', weekly)}
-                    showErrors={showErrors}
-                  />
-                )}
-              </div>
-
-              {/* Cancellation Policy */}
-              <div className="space-y-4 border-t border-gray-100 pt-6">
-                <h3 className="text-base font-semibold text-gray-900">Cancellation Policy</h3>
-                <div className="space-y-2">
-                  {CANCELLATION_POLICIES.map((policy) => (
-                    <div
-                      key={policy.value}
-                      onClick={() => updateForm('cancellationPolicy', policy.value)}
-                      className={`cursor-pointer rounded-lg border p-4 transition ${
-                        form.cancellationPolicy === policy.value
-                          ? 'border-[#0094CA] bg-[#0094CA]/5'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                            form.cancellationPolicy === policy.value
-                              ? 'border-[#0094CA]'
-                              : 'border-gray-300'
-                          }`}
-                        >
-                          {form.cancellationPolicy === policy.value && (
-                            <div className="h-2 w-2 rounded-full bg-[#0094CA]" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{policy.label}</p>
-                          <p className="text-sm text-gray-500">{policy.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Terms & Conditions — printed on the guest's ticket PDF */}
-              <div className="space-y-2 border-t border-gray-100 pt-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-gray-900">
-                    Terms &amp; Conditions
-                  </h3>
-                  <span className="text-xs text-gray-400">
-                    {form.termsAndConditions.length}/2000
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500">
-                  Specific to this experience. Shown on the guest&apos;s ticket
-                  PDF. Leave blank for none.
-                </p>
-                <textarea
-                  value={form.termsAndConditions}
-                  onChange={(e) => {
-                    if (e.target.value.length <= 2000)
-                      updateForm('termsAndConditions', e.target.value);
-                  }}
-                  maxLength={2000}
-                  rows={6}
-                  placeholder={
-                    'e.g.\n• Carry a valid photo ID.\n• Arrive 15 minutes early.\n• Non-transferable.'
+                <MoreOptions
+                  title="Guest details at booking"
+                  summary={
+                    form.requiresAttendeeDetails
+                      ? `${form.attendeeFields.length} field${form.attendeeFields.length === 1 ? '' : 's'} required`
+                      : 'Off'
                   }
-                  className="w-full resize-y rounded-lg border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-[#0094CA]"
-                />
-              </div>
-
-              {/* Attendee Details */}
-              <div className="space-y-4 border-t border-gray-100 pt-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-semibold text-gray-900">
-                      Require attendee details
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Collect extra details from each guest at booking. Selected
-                      fields are required.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={form.requiresAttendeeDetails}
-                    onClick={() =>
-                      updateForm(
-                        'requiresAttendeeDetails',
-                        !form.requiresAttendeeDetails,
-                      )
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                      form.requiresAttendeeDetails ? 'bg-[#0094CA]' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                        form.requiresAttendeeDetails
-                          ? 'translate-x-6'
-                          : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {form.requiresAttendeeDetails && (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {ATTENDEE_FIELDS.map((f) => {
-                      const checked = form.attendeeFields.includes(f.key);
-                      return (
-                        <label
-                          key={f.key}
-                          className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) =>
-                              updateForm(
-                                'attendeeFields',
-                                e.target.checked
-                                  ? [...form.attendeeFields, f.key]
-                                  : form.attendeeFields.filter(
-                                      (k) => k !== f.key,
-                                    ),
-                              )
-                            }
-                            className="h-4 w-4 shrink-0 rounded border-gray-300 text-[#0094CA] focus:ring-[#0094CA]"
-                          />
-                          <span className="min-w-0 break-words">{f.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Privacy & Access */}
-              <div className="space-y-4 border-t border-gray-100 pt-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-semibold text-gray-900">
-                      Private experience
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Still shown in discovery with a lock — guests need a passkey
-                      to book. Share the passkey with your invited guests.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={form.isPrivate}
-                    onClick={() => updateForm('isPrivate', !form.isPrivate)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                      form.isPrivate ? 'bg-[#0094CA]' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                        form.isPrivate ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {form.isPrivate && (
-                  <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    {/* Which gate: a code the guest types, or a request the host approves */}
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {(
-                        [
-                          {
-                            key: 'passkey' as const,
-                            title: 'Unlock with a code',
-                            desc: 'Guests enter a passkey to book.',
-                          },
-                          {
-                            key: 'rsvp' as const,
-                            title: 'Request to join',
-                            desc: 'Guests apply with their details; the host approves.',
-                          },
-                        ]
-                      ).map((opt) => (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() => updateForm('privateAccessMode', opt.key)}
-                          className={`rounded-lg border p-3 text-left transition ${
-                            form.privateAccessMode === opt.key
-                              ? 'border-[#0094CA] bg-[#0094CA]/5 ring-1 ring-[#0094CA]'
-                              : 'border-gray-200 bg-white hover:border-gray-300'
-                          }`}
-                        >
-                          <span className="block text-sm font-medium text-gray-800">
-                            {opt.title}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-gray-500">
-                            {opt.desc}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {form.privateAccessMode === 'rsvp' ? (
-                      <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
-                        <p className="text-sm text-gray-600">
-                          Guests see a <strong>Request to join</strong> button instead
-                          of a passkey prompt. They fill in the details configured in
-                          the Attendee details step, and requests appear in the host
-                          dashboard and in Join requests here.
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Approving unlocks booking — the guest still books and pays.
-                        </p>
-                        <p className="text-xs font-medium text-amber-700">
-                          Requires attendee details: turn them on and pick at least
-                          one field, or there&apos;s nothing to judge a request on.
-                        </p>
-                      </div>
-                    ) : (
-                    <>
-                    {/* Access mode: one shared passkey vs a unique code per guest */}
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {(
-                        [
-                          {
-                            key: 'shared' as const,
-                            title: 'Same passkey for everyone',
-                            desc: 'One passkey you share with all invited guests.',
-                          },
-                          {
-                            key: 'unique' as const,
-                            title: 'A unique code per guest',
-                            desc: 'Generate single-use codes; each books free.',
-                          },
-                        ]
-                      ).map((opt) => (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() => updateForm('accessMode', opt.key)}
-                          className={`rounded-lg border p-3 text-left transition ${
-                            form.accessMode === opt.key
-                              ? 'border-[#0094CA] bg-[#0094CA]/5 ring-1 ring-[#0094CA]'
-                              : 'border-gray-200 bg-white hover:border-gray-300'
-                          }`}
-                        >
-                          <span className="block text-sm font-medium text-gray-800">
-                            {opt.title}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-gray-500">
-                            {opt.desc}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {form.accessMode === 'shared' ? (
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                          Passkey
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={form.accessPasskey}
-                            onChange={(e) =>
-                              updateForm('accessPasskey', e.target.value)
-                            }
-                            placeholder="e.g. SUMMER24"
-                            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0094CA] focus:outline-none focus:ring-1 focus:ring-[#0094CA]"
-                          />
-                          <button
-                            type="button"
+                  defaultOpen={
+                    showErrors &&
+                    form.isPrivate &&
+                    form.privateAccessMode === 'rsvp' &&
+                    form.attendeeFields.length === 0
+                  }
+                >
+                  <ToggleRow
+                    label="Ask each guest for details"
+                    hint="Selected fields are required at booking."
+                    checked={form.requiresAttendeeDetails}
+                    onChange={(next) => updateForm('requiresAttendeeDetails', next)}
+                  />
+                  {form.requiresAttendeeDetails && (
+                    <div className="flex flex-wrap gap-2">
+                      {ATTENDEE_FIELDS.map((f) => {
+                        const on = form.attendeeFields.includes(f.key);
+                        return (
+                          <Chip
+                            key={f.key}
+                            active={on}
                             onClick={() =>
                               updateForm(
-                                'accessPasskey',
-                                Math.random()
-                                  .toString(36)
-                                  .slice(2, 8)
-                                  .toUpperCase(),
+                                'attendeeFields',
+                                on
+                                  ? form.attendeeFields.filter((k) => k !== f.key)
+                                  : [...form.attendeeFields, f.key],
                               )
                             }
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                           >
-                            Generate
-                          </button>
-                        </div>
-                        {showErrors && !form.accessPasskey.trim() && (
-                          <p className="mt-1 text-xs text-red-500">
-                            A private experience needs a passkey.
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-600">
-                        Each guest gets their own single-use code that unlocks
-                        booking.{' '}
-                        {isEdit ? (
-                          <span>Generate the codes in the Codes section below.</span>
-                        ) : (
-                          <span className="text-gray-400">
-                            Save the experience first, then generate the codes in
-                            the Codes section.
-                          </span>
-                        )}
-                      </p>
-                    )}
-                    </>
-                    )}
+                            {f.label}
+                          </Chip>
+                        );
+                      })}
+                    </div>
+                  )}
+                </MoreOptions>
 
-                  </div>
+                <MoreOptions
+                  title="Terms on the ticket"
+                  summary={form.termsAndConditions.trim() ? 'Added' : 'None'}
+                >
+                  <textarea
+                    value={form.termsAndConditions}
+                    onChange={(e) => {
+                      if (e.target.value.length <= 2000)
+                        updateForm('termsAndConditions', e.target.value);
+                    }}
+                    maxLength={2000}
+                    rows={5}
+                    placeholder={
+                      'Printed on the guest’s ticket PDF, e.g.\n• Carry a valid photo ID.\n• Arrive 15 minutes early.'
+                    }
+                    className={`${FIELD} resize-y`}
+                  />
+                  <p className="px-1 text-right text-xs text-white/35">
+                    {form.termsAndConditions.length}/2000
+                  </p>
+                </MoreOptions>
+
+                {isEdit && (
+                  <MoreOptions
+                    title="Page link"
+                    summary={`/experience/${form.slug}`}
+                    defaultOpen={slugStatus === 'taken' || slugStatus === 'invalid'}
+                  >
+                    <Rows>
+                      <Row
+                        label="myslotmate.com/experience/"
+                        error={slugStatus === 'taken' || slugStatus === 'invalid'}
+                      >
+                        <input
+                          type="text"
+                          value={form.slug}
+                          onChange={(e) =>
+                            updateForm(
+                              'slug',
+                              // Lenient while typing (keep a trailing hyphen so
+                              // word boundaries work); the server slugifies again.
+                              e.target.value
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, '-')
+                                .replace(/^-+/, ''),
+                            )
+                          }
+                          placeholder="sunset-yoga"
+                          aria-label="URL slug"
+                          className={ROW_INPUT}
+                        />
+                      </Row>
+                    </Rows>
+                    <p
+                      className={`px-1 text-xs ${
+                        slugStatus === 'taken' || slugStatus === 'invalid'
+                          ? 'text-red-400'
+                          : slugStatus === 'available'
+                            ? 'text-emerald-300'
+                            : 'text-white/45'
+                      }`}
+                    >
+                      {slugStatus === 'checking'
+                        ? 'Checking…'
+                        : slugStatus === 'available'
+                          ? 'Available.'
+                          : slugStatus === 'taken'
+                            ? 'Already in use — pick another.'
+                            : slugStatus === 'invalid'
+                              ? 'A link is required.'
+                              : ''}{' '}
+                      <span className="text-white/40">
+                        Changing it changes the public URL; the old id link keeps working.
+                      </span>
+                    </p>
+                  </MoreOptions>
+                )}
+
+                {isEdit && (
+                  <MoreOptions title="Delete experience" summary="">
+                    <p className="text-sm text-white/55">
+                      Removes this experience for good. Blocked while it still has active
+                      bookings — cancel or pause it first.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="flex items-center gap-2 rounded-full border border-rose-400/25 bg-rose-500/[0.08] px-5 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/[0.14]"
+                    >
+                      <FiTrash2 size={16} /> Delete experience
+                    </button>
+                  </MoreOptions>
                 )}
               </div>
+            </Section>
 
-              {/* Coupons — only for a saved event (needs an id + owning host). */}
-              {isEdit && editEventId && selectedHost?.id && form.isPrivate && (
-                <CouponsManager
-                  eventId={editEventId}
-                  hostId={selectedHost.id}
-                  kind="access"
-                />
-              )}
-              {isEdit && editEventId && selectedHost?.id && !form.isFree && (
-                <CouponsManager
-                  eventId={editEventId}
-                  hostId={selectedHost.id}
-                  kind="free"
-                />
-              )}
-              {isEdit && editEventId && selectedHost?.id && !form.isFree && (
-                <CouponsManager
-                  eventId={editEventId}
-                  hostId={selectedHost.id}
-                  kind="discount"
-                />
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 border-t border-gray-100 pt-6">
-                <button
-                  onClick={goToStep1}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 font-semibold text-gray-700 transition duration-300 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 active:scale-[0.99]"
-                >
-                  <FiArrowLeft size={16} />
-                  <span>Back</span>
-                </button>
-                {!isEdit && (
+            {/* Save: one floating pill under the form */}
+            <div className="sticky bottom-[max(16px,env(safe-area-inset-bottom))] z-30 mt-10">
+              <div className="flex w-full gap-2 rounded-[28px] border border-white/10 bg-[#121426]/90 p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                {!isEdit || isDraftEvent ? (
                   <button
                     onClick={() => void handleSubmit(true)}
                     disabled={isSubmitting}
-                    className="flex flex-1 items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white py-3.5 px-6 font-semibold text-gray-700 transition duration-300 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="shrink-0 rounded-full px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
                   >
-                    {submitType === 'draft' ? (
-                      <>
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-500 border-t-transparent" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <span>Save as Draft</span>
-                    )}
+                    {submitType === 'draft' ? 'Saving…' : 'Save draft'}
                   </button>
+                ) : (
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white"
+                  >
+                    View event <FiExternalLink size={14} />
+                  </a>
                 )}
                 <button
                   onClick={() => void handleSubmit(false)}
                   disabled={isSubmitting}
-                  className="relative overflow-hidden flex flex-[1.5] items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#0094CA] via-[#00a6e2] to-[#00bde5] py-3.5 px-6 font-bold text-white shadow-lg shadow-[#0094CA]/20 transition-all duration-300 ease-out hover:from-[#008bbd] hover:to-[#00b0d6] hover:shadow-xl hover:shadow-[#0094CA]/30 hover:-translate-y-0.5 hover:scale-[1.01] active:translate-y-0 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 ${GRADIENT}`}
                 >
-                  {submitType === 'publish' ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>{isEdit ? 'Saving...' : 'Publishing...'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <FiCheck
-                        className="text-lg transition-transform group-hover:scale-110"
-                        size={18}
-                      />
-                      <span>{isEdit ? 'Save changes' : 'Publish Experience'}</span>
-                    </>
-                  )}
+                  <FiCheck size={18} />
+                  {submitType === 'publish'
+                    ? 'Saving…'
+                    : isEdit && !isDraftEvent
+                      ? 'Save changes'
+                      : 'Publish event'}
                 </button>
               </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Success Modal */}
+      {/* Delete confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#121426] p-8">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15">
+              <FiTrash2 className="text-red-300" size={22} />
+            </div>
+            <h2 className="font-outfit mb-2 text-xl font-bold text-white">Delete this experience?</h2>
+            <p className="mb-6 text-sm leading-6 text-white/55">
+              “{form.title || 'Untitled'}” is removed for good. This can’t be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 rounded-full bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="flex-1 rounded-full bg-red-600 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SuccessModal
         isOpen={showSuccess}
-        experienceId={createdEventId}
+        slugOrId={form.slug || createdEventId}
         isDraft={savedAsDraft}
-        hostName={selectedHost?.name ?? 'the host'}
+        hostName={hostName}
+        isEdit={isEdit}
       />
 
       <ImageCropModal
         file={cropQueue.length > 0 ? cropQueue[0]! : null}
-        aspect={16 / 9}
-        onClose={() => setCropQueue([])}
+        aspect={POSTER_ASPECT}
+        onClose={() => {
+          setCropQueue([]);
+          setRecropIndex(null);
+        }}
         onConfirm={handleCropConfirm}
       />
-
-    </>
+    </div>
   );
 };

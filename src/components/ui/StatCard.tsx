@@ -24,8 +24,8 @@ export const StatCard: React.FC<StatCardProps> = ({
   icon: Icon,
   hint,
   trend,
-  iconBg = 'bg-brand-50',
-  iconColor = 'text-brand-600',
+  iconBg = 'bg-[#7B2FFF]/15',
+  iconColor = 'text-[#D8B4FE]',
   prefix,
   onClick,
   className = '',
@@ -36,9 +36,9 @@ export const StatCard: React.FC<StatCardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/95 p-5 shadow-soft transition-all duration-200 backdrop-blur-md ${
+      className={`group relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#121426]/80 p-5 transition-all duration-200 backdrop-blur-xl ${
         onClick
-          ? 'hover:-translate-y-1 hover:border-brand-300 hover:shadow-panel cursor-pointer'
+          ? 'hover:-translate-y-1 hover:border-white/20 cursor-pointer'
           : ''
       } ${className}`}
     >
@@ -53,10 +53,10 @@ export const StatCard: React.FC<StatCardProps> = ({
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold tracking-tight ${
               isUp
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                ? 'bg-emerald-400/15 text-emerald-300'
                 : isDown
-                ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                : 'bg-slate-100 text-slate-600 border border-slate-200/60'
+                ? 'bg-rose-500/15 text-rose-300'
+                : 'bg-white/10 text-white/60'
             }`}
           >
             {isUp && <TrendingUp className="h-3 w-3" />}
@@ -67,20 +67,20 @@ export const StatCard: React.FC<StatCardProps> = ({
         )}
 
         {onClick && !trend && (
-          <ArrowUpRight className="h-4 w-4 text-slate-300 transition-colors group-hover:text-brand-500" />
+          <ArrowUpRight className="h-4 w-4 text-white/30 transition-colors group-hover:text-[#D8B4FE]" />
         )}
       </div>
 
       <div className="mt-4">
-        <p className="flex items-baseline gap-1 font-display text-2xl font-extrabold tracking-tight text-ink">
+        <p className="flex items-baseline gap-1 font-outfit text-2xl font-bold text-white">
           {prefix && <span className="text-xl font-bold">{prefix}</span>}
           <span>{value}</span>
         </p>
-        <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-white/45">
           {title}
         </p>
         {hint && (
-          <p className="mt-1 text-[11px] font-medium text-slate-400">
+          <p className="mt-1 text-[11px] text-white/40">
             {hint}
           </p>
         )}

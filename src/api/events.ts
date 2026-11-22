@@ -136,6 +136,8 @@ export interface EventDetail {
   id: string;
   slug: string;
   host_id: string;
+  /** draft | live | paused | cancelled */
+  status?: string;
   title: string;
   hook_line: string | null;
   mood: string | null;

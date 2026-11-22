@@ -80,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   };
 
   // Shared classes for a nav row, adapting to the collapsed (icon-only) rail.
-  const rowBase = `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold transition-all duration-200 ${
+  const rowBase = `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ${
     collapsed ? 'lg:justify-center lg:px-0 lg:w-11 lg:mx-auto' : ''
   }`;
   const labelCls = collapsed ? 'lg:hidden' : '';
@@ -90,34 +90,43 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden backdrop-blur-sm transition-opacity"
           onClick={onClose}
           aria-hidden="true"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200/80 bg-white/95 p-2 shadow-panel backdrop-blur-md transition-all duration-300 lg:sticky lg:top-0 lg:z-50 lg:h-screen lg:translate-x-0 lg:self-start ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-white/[0.06] bg-[#0b0c1a]/95 p-3 backdrop-blur-xl transition-all duration-300 lg:sticky lg:top-0 lg:z-50 lg:h-screen lg:translate-x-0 lg:self-start ${
           collapsed ? 'lg:w-20' : 'lg:w-68'
         } ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Header: logo + collapse / close */}
-        <div className={`flex items-center justify-between pb-2 border-b border-slate-100 ${collapsed ? 'lg:justify-center' : ''}`}>
-          <NavLink to="/" onClick={onClose} className={`flex items-center gap-2 ${collapsed ? 'lg:hidden' : ''}`}>
-            <img src="/Myslotmate-Logo.png" alt="MySlotMate" className="h-9 w-auto object-contain" />
+        <div className={`flex items-center justify-between border-b border-white/[0.06] pb-3 ${collapsed ? 'lg:flex-col lg:gap-3' : ''}`}>
+          <NavLink to="/" onClick={onClose} className="flex items-center gap-2 px-1">
+            <img
+              src="/brand/logo-horizontal-white.png"
+              alt="MySlotMate"
+              className={`h-8 w-auto object-contain ${collapsed ? 'lg:hidden' : ''}`}
+            />
+            <img
+              src="/brand/admin-mark.png"
+              alt="MySlotMate"
+              className={`hidden h-9 w-9 rounded-xl object-contain ${collapsed ? 'lg:block' : ''}`}
+            />
           </NavLink>
 
           {/* Desktop collapse / expand toggle */}
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 lg:inline-flex cursor-pointer relative group"
+            className="hidden h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-white/50 transition-all hover:bg-white/[0.06] hover:text-white lg:inline-flex cursor-pointer relative group"
             type="button"
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             {collapsed && (
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-extrabold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
-                <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl border border-white/10 bg-[#14152a] text-white text-xs font-semibold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#14152a]" />
                 Expand sidebar
               </div>
             )}
@@ -126,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           {/* Mobile close */}
           <button
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 lg:hidden cursor-pointer"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-white/60 lg:hidden cursor-pointer"
             type="button"
             aria-label="Close sidebar"
           >
@@ -138,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         <nav className={`mt-4 flex-1 space-y-4 pr-0.5 ${collapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
           {SECTIONS.map((section) => (
             <div key={section.title} className="space-y-1">
-              <p className={`px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 ${labelCls}`}>
+              <p className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30 ${labelCls}`}>
                 {section.title}
               </p>
               {section.items.map((item) => {
@@ -151,8 +160,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     className={({ isActive }) =>
                       `${rowBase} ${
                         isActive
-                          ? 'bg-gradient-to-r from-brand-600 to-brand-500 text-white shadow-md shadow-brand-500/20'
-                          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                          ? 'bg-gradient-to-r from-[#7038F5] to-[#B724EA] text-white shadow-[0_8px_24px_-8px_rgba(183,36,234,0.6)]'
+                          : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
                       }`
                     }
                   >
@@ -161,8 +170,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
                     {/* Floating Tooltip when Collapsed */}
                     {collapsed && (
-                      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-extrabold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
-                        <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+                      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl border border-white/10 bg-[#14152a] text-white text-xs font-semibold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                        <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#14152a]" />
                         {item.name}
                       </div>
                     )}
@@ -174,18 +183,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </nav>
 
         {/* Footer: log out */}
-        <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="mt-3 border-t border-white/[0.06] pt-3">
           <button
             onClick={handleLogout}
-            className={`${rowBase} w-full text-rose-600 hover:bg-rose-50 hover:text-rose-700 cursor-pointer`}
+            className={`${rowBase} w-full text-rose-300/80 hover:bg-rose-500/10 hover:text-rose-300 cursor-pointer`}
           >
             <LogOut className="h-4 w-4 shrink-0" />
             <span className={labelCls}>Log out</span>
 
             {/* Floating Tooltip when Collapsed */}
             {collapsed && (
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-extrabold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
-                <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl border border-white/10 bg-[#14152a] text-white text-xs font-semibold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#14152a]" />
                 Log out
               </div>
             )}

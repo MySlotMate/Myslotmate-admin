@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { ApiError } from '../../api/client';
 import { KeyRound, Mail, ShieldAlert } from 'lucide-react';
@@ -44,42 +43,54 @@ export const Login: React.FC = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-shell bg-halo relative overflow-hidden">
-      {/* Background radial accent halos */}
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-brand-400/20 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 rounded-full bg-sky-400/15 blur-3xl pointer-events-none" />
+  const field =
+    'flex items-center gap-3 rounded-2xl border border-white/10 bg-[#121426] px-4 transition focus-within:border-[#B57BFF]';
+  const input =
+    'row-input w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-white/30';
 
-      <Card className="w-full max-w-md p-8 bg-white/90 shadow-panel border border-brand-100/50 backdrop-blur z-10">
-        <div className="text-center mb-8">
-          <img src="/Myslotmate-Logo.png" alt="MySlotMate Logo" className="h-12 w-auto mx-auto mb-4" />
-          <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700 mt-2">Control Console</p>
-          <h2 className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink">
-            Admin Authentication
-          </h2>
-          <p className="mt-2 text-xs text-mist leading-relaxed">
-            Enter your internal credentials to manage hosts, reviews, payouts, and city marketplace operations.
+  return (
+    <div className="msm-dark relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/2 h-[560px] w-[560px] -translate-x-1/2 rounded-full bg-[#7B2FFF]/25 blur-[140px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-[-10%] bottom-[-20%] h-[420px] w-[420px] rounded-full bg-[#B724EA]/15 blur-[140px]"
+      />
+
+      <div className="relative z-10 w-full max-w-md rounded-[28px] border border-white/10 bg-[#121426]/80 p-8 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl">
+        <div className="mb-8 text-center">
+          <img
+            src="/brand/logo-horizontal-white.png"
+            alt="MySlotMate"
+            className="mx-auto h-10 w-auto"
+          />
+          <h1 className="font-outfit mt-7 text-2xl font-bold text-white">Admin console</h1>
+          <p className="mt-2 text-sm text-white/50">
+            Sign in to manage experiences, hosts, bookings and payouts.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="flex items-start gap-3 rounded-2xl bg-rose-50 border border-rose-100 p-4 text-xs font-semibold text-rose-700">
-              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+            <div className="flex items-start gap-3 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-200">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
               <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="mb-2 block text-xs font-bold text-slate-700" htmlFor="email">
-              Admin Email
+            <label className="mb-2 block text-sm text-white/60" htmlFor="email">
+              Email
             </label>
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 shadow-xs focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
-              <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+            <div className={field}>
+              <Mail className="h-4 w-4 shrink-0 text-white/40" />
               <input
                 id="email"
                 type="email"
-                className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                autoComplete="username"
+                className={input}
                 placeholder="admin@myslotmate.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -89,15 +100,16 @@ export const Login: React.FC = () => {
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-bold text-slate-700" htmlFor="password">
-              Access Token / Password
+            <label className="mb-2 block text-sm text-white/60" htmlFor="password">
+              Password
             </label>
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 shadow-xs focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
-              <KeyRound className="h-4 w-4 text-slate-400 shrink-0" />
+            <div className={field}>
+              <KeyRound className="h-4 w-4 shrink-0 text-white/40" />
               <input
                 id="password"
                 type="password"
-                className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                autoComplete="current-password"
+                className={input}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -106,20 +118,20 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          <Button variant="primary" type="submit" className="w-full justify-center mt-3 py-3" isLoading={loading}>
-            Verify & Enter
+          <Button
+            variant="primary"
+            type="submit"
+            className="mt-2 w-full justify-center py-3.5"
+            isLoading={loading}
+          >
+            Sign in
           </Button>
         </form>
 
-        <div className="mt-6 text-center border-t border-slate-100 pt-5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Secure administrative zone
-          </p>
-          <p className="mt-2 text-[10px] text-slate-400 leading-normal">
-            Unauthorized access attempts are logged and reported to the system safety administrators.
-          </p>
-        </div>
-      </Card>
+        <p className="mt-6 border-t border-white/[0.06] pt-5 text-center text-xs text-white/35">
+          Restricted to MySlotMate staff. Sign-in attempts are logged.
+        </p>
+      </div>
     </div>
   );
 };

@@ -14,11 +14,11 @@ export const Card: React.FC<CardProps> = ({
   hoverable = false,
 }) => {
   const base = muted
-    ? 'rounded-3xl border border-brand-100/70 bg-brand-50/60 shadow-soft'
-    : 'rounded-3xl border border-slate-200/70 bg-white/95 shadow-soft backdrop-blur-md';
+    ? 'rounded-3xl border border-white/[0.06] bg-white/[0.03]'
+    : 'rounded-3xl border border-white/[0.08] bg-[#121426]/80 backdrop-blur-xl';
 
   const hover = hoverable
-    ? 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-panel hover:border-brand-200'
+    ? 'transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20'
     : '';
 
   return <div className={`${base} ${hover} ${className}`}>{children}</div>;

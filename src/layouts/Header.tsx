@@ -1,7 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Search } from 'lucide-react';
-import { Button } from '../components/ui/Button';
+import { LogOut, Menu, Search, Send } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
@@ -11,115 +10,106 @@ interface HeaderProps {
   onSearchChange: (val: string) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ 
-  onOpenSidebar, 
+const PAGE_TITLES: Record<string, string> = {
+  '/': 'Dashboard',
+  '/users': 'Users',
+  '/hosts': 'Hosts',
+  '/experiences': 'Experiences',
+  '/bookings': 'Bookings',
+  '/join-requests': 'Join requests',
+  '/payments': 'Payments',
+  '/cities': 'Cities',
+  '/reviews': 'Reviews',
+  '/reports': 'Reports',
+  '/blogs': 'Blogs',
+  '/marketing': 'Marketing',
+  '/notifications': 'Notifications',
+  '/settings': 'Settings',
+};
+
+const titleFor = (path: string) =>
+  PAGE_TITLES[path] ??
+  PAGE_TITLES[`/${path.split('/')[1] ?? ''}`] ??
+  'Dashboard';
+
+const initials = (name?: string) =>
+  (name ?? 'Admin')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0]!.toUpperCase())
+    .join('');
+
+export const Header: React.FC<HeaderProps> = ({
+  onOpenSidebar,
   isSidebarOpen = false,
-  globalSearch, 
-  onSearchChange 
+  globalSearch,
+  onSearchChange,
 }) => {
   const { logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const pageTitles: { [key: string]: string } = {
-    '/': 'Dashboard',
-    '/users': 'Users',
-    '/hosts': 'Hosts',
-    '/experiences': 'Experiences',
-    '/bookings': 'Bookings',
-    '/join-requests': 'Join requests',
-    '/payments': 'Payments',
-    '/cities': 'Cities',
-    '/reviews': 'Reviews',
-    '/reports': 'Reports',
-    '/blogs': 'Blogs',
-    '/marketing': 'Marketing',
-    '/notifications': 'Notifications',
-    '/settings': 'Settings',
-  };
-
-  const currentTitle = pageTitles[location.pathname] || 'Dashboard';
-
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
-      <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 sm:px-6 lg:px-10">
+    <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#080914]/75 backdrop-blur-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-10">
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenSidebar}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 shadow-xs lg:hidden cursor-pointer hover:bg-slate-50 hover:border-brand-300 transition-all"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white transition hover:bg-white/10 lg:hidden"
             type="button"
-            aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-            title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+            aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">MySlotMate Portal</p>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">{currentTitle}</h2>
-          </div>
+          <h2 className="font-outfit text-xl font-semibold text-white">
+            {titleFor(location.pathname)}
+          </h2>
         </div>
 
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-3 min-w-[280px]">
-          {/* Global search input with shortcut hint */}
-          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2 shadow-xs transition-all focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/20 min-w-[240px] max-w-md flex-1">
-            <Search className="h-4 w-4 text-slate-400 shrink-0" />
+        <div className="flex min-w-[260px] flex-1 items-center justify-end gap-2">
+          <label className="flex max-w-md min-w-0 flex-1 items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 transition focus-within:border-[#B57BFF] focus-within:bg-white/[0.08]">
+            <Search className="h-4 w-4 shrink-0 text-white/40" />
             <input
-              className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+              className="row-input w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
               type="search"
-              placeholder="Search users, experiences, bookings..."
+              placeholder="Search users, experiences, bookings"
               value={globalSearch}
               onChange={(e) => onSearchChange(e.target.value)}
             />
-            <kbd className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-extrabold text-slate-400 shadow-xs select-none">
-              ⌘K
-            </kbd>
-          </div>
+          </label>
 
-          <Button 
-            variant="secondary" 
-            size="sm"
-            onClick={() => alert('Exporting directory data as CSV...')}
-          >
-            Export CSV
-          </Button>
-          
-          <Button 
-            variant="primary" 
-            size="sm"
+          <button
+            type="button"
             onClick={() => navigate('/notifications')}
+            className="hidden items-center gap-1.5 rounded-full bg-gradient-to-r from-[#7038F5] to-[#B724EA] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 sm:inline-flex"
           >
-            Compose
-          </Button>
+            <Send className="h-3.5 w-3.5" /> Compose
+          </button>
 
-          {/* User profile menu */}
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white px-3 py-1.5 shadow-xs relative group cursor-pointer hover:border-brand-200">
-            <div className="text-right hidden sm:block">
-              <p className="text-[10px] font-bold text-slate-400">Signed in as</p>
-              <p className="text-xs font-extrabold text-ink">{user?.name || 'Aarav Sharma'}</p>
-            </div>
-            <div className="relative">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 font-extrabold text-white text-xs select-none shadow-xs">
-                {user?.name ? user.name.split(' ').map(n => n[0]).join('') : 'AS'}
-              </div>
-              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 border-2 border-white" />
-            </div>
-
-            {/* Premium hover action menu */}
-            <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-panel opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-              <div className="px-3 py-2 border-b border-slate-100 text-left">
-                <p className="text-[10px] font-bold text-slate-400">Scope</p>
-                <p className="text-xs font-extrabold text-ink">{user?.scope || 'Global Admin'}</p>
+          {/* Account menu */}
+          <div className="group relative">
+            <button
+              type="button"
+              aria-label="Account"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#7038F5] to-[#B724EA] text-xs font-semibold text-white"
+            >
+              {initials(user?.name)}
+              <span className="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[#080914] bg-emerald-400" />
+            </button>
+            <div className="invisible absolute top-full right-0 z-50 mt-2 w-56 rounded-2xl border border-white/10 bg-[#14152a] p-2 opacity-0 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)] transition-all duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+              <div className="border-b border-white/[0.06] px-3 py-2">
+                <p className="truncate text-sm font-semibold text-white">{user?.name || 'Administrator'}</p>
+                <p className="truncate text-xs text-white/45">{user?.scope || 'Global admin'}</p>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm('Are you sure you want to log out?')) {
-                    logout();
-                  }
+                  if (window.confirm('Log out of the admin console?')) logout();
                 }}
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 mt-1 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
               >
-                Log out session
+                <LogOut className="h-4 w-4" /> Log out
               </button>
             </div>
           </div>

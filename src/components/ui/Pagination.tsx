@@ -25,11 +25,11 @@ export const Pagination: React.FC<PaginationProps> = ({
   const canNext = page < totalPages && !disabled;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/95 px-5 py-3 shadow-soft backdrop-blur-md">
-      <p className="text-xs font-semibold text-slate-500">
-        Showing <span className="font-extrabold text-ink">{start}</span>–
-        <span className="font-extrabold text-ink">{end}</span> of{' '}
-        <span className="font-extrabold text-ink">{total}</span> items
+    <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
+      <p className="text-xs text-white/45">
+        Showing <span className="font-semibold text-white">{start}</span>–
+        <span className="font-semibold text-white">{end}</span> of{' '}
+        <span className="font-semibold text-white">{total}</span> items
       </p>
       <div className="flex items-center gap-3">
         <Button
@@ -40,7 +40,7 @@ export const Pagination: React.FC<PaginationProps> = ({
         >
           Previous
         </Button>
-        <span className="rounded-xl bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-700">
+        <span className="px-2 text-xs font-semibold text-white/70">
           {page} / {totalPages}
         </span>
         <Button

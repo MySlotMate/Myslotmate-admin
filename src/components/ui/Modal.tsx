@@ -42,22 +42,22 @@ export const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Dialog */}
       <div
-        className={`relative w-full ${maxWidthClasses[maxWidth]} rounded-3xl border border-slate-200/80 bg-white p-6 shadow-panel transition-all max-h-[90vh] flex flex-col z-10`}
+        className={`relative w-full ${maxWidthClasses[maxWidth]} rounded-[28px] border border-white/10 bg-[#121426] p-6 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] transition-all max-h-[90vh] flex flex-col z-10`}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h3 className="font-display text-xl font-bold tracking-tight text-ink">
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+          <h3 className="font-outfit text-xl font-bold text-white">
             {title}
           </h3>
           <button
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/50 hover:bg-white/10 hover:text-white transition cursor-pointer"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />

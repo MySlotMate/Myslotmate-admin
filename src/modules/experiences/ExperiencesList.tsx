@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IndianRupee } from 'lucide-react';
-import { Table } from '../../components/ui/Table';
-import { Badge } from '../../components/ui/Badge';
-import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
-import { Pagination } from '../../components/ui/Pagination';
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiPlus,
+  FiSearch,
+  FiTrash2,
+} from 'react-icons/fi';
+import { Chip, GRADIENT } from '../../components/event-form/EventFormKit';
 import { fetchEvents } from '../../api/directory';
 import type { AdminEvent } from '../../api/directory';
 import { deleteEvent, pauseEvent, resumeEvent } from '../../api/events';
@@ -21,15 +23,13 @@ const PAGE_SIZE = 10;
 
 const STATUS_OPTIONS = ['live', 'draft', 'paused', 'expired', 'cancelled'];
 
-const statusColor = (status: string): 'green' | 'blue' | 'amber' | 'rose' | 'slate' => {
-  switch (status) {
-    case 'live': return 'green';
-    case 'draft': return 'blue';
-    case 'paused': return 'amber';
-    case 'cancelled': return 'rose';
-    case 'expired': return 'slate';
-    default: return 'blue';
-  }
+// Status pills in the brand palette (dark).
+const STATUS_STYLE: Record<string, string> = {
+  live: 'bg-emerald-400/15 text-emerald-300',
+  draft: 'bg-white/10 text-white/70',
+  paused: 'bg-amber-400/15 text-amber-300',
+  cancelled: 'bg-rose-500/15 text-rose-300',
+  expired: 'bg-white/[0.06] text-white/45',
 };
 
 // A published event (live/paused) whose time has passed shows as "expired" — its
@@ -159,152 +159,246 @@ export const ExperiencesList: React.FC<ExperiencesListProps> = ({ searchQuery })
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">Experiences management</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" onClick={() => alert('Creating featured category landing page...')}>
-            Create featured collection
-          </Button>
-          <Button variant="primary" onClick={() => navigate('/experiences/new')}>
-            + Create experience
-          </Button>
-        </div>
-      </div>
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const ghostBtn =
+    'whitespace-nowrap rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white disabled:opacity-50';
 
-      {/* Filter panel */}
-      <div className="rounded-3xl border border-brand-100/80 bg-white/95 shadow-soft backdrop-blur-md p-5">
-        <div className="grid gap-4 lg:grid-cols-[1.6fr_minmax(0,1fr)]">
-          <div className="flex items-center gap-3 rounded-2xl border border-brand-100 bg-white px-4 py-3 shadow-sm">
-            <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-              <circle cx="11" cy="11" r="7"></circle>
-              <path d="M20 20l-3.5-3.5" stroke-linecap="round"></path>
-            </svg>
+  return (
+    // Full-bleed dark page inside the admin shell, in the website's look.
+    <div className="msm-dark relative -mx-4 -my-6 min-h-[calc(100vh-4rem)] overflow-x-clip px-4 py-8 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/3 h-[480px] w-[480px] rounded-full bg-[#7B2FFF]/15 blur-[140px]"
+      />
+      <div className="relative mx-auto max-w-[1280px] space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-outfit text-3xl font-bold text-white">Experiences</h1>
+            <p className="mt-1 text-sm text-white/50">
+              {loading ? 'Loading…' : `${total.toLocaleString()} ${statusParam || 'total'}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => alert('Creating featured category landing page...')}
+              className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              Featured collection
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/experiences/new')}
+              className={`flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_-10px_rgba(183,36,234,0.7)] transition hover:opacity-90 ${GRADIENT}`}
+            >
+              <FiPlus size={16} /> New experience
+            </button>
+          </div>
+        </div>
+
+        {/* Search + status */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#121426] px-4 transition focus-within:border-[#B57BFF]">
+            <FiSearch className="shrink-0 text-white/40" size={16} />
             <input
-              className="w-full bg-transparent text-sm outline-none"
+              className="row-input w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-white/30"
               type="search"
-              placeholder="Search experiences, hosts, cities, or categories..."
+              placeholder="Search experiences, hosts, cities or categories"
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
             />
           </div>
-          <select
-            className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option>All statuses</option>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+          <div className="flex flex-wrap gap-2">
+            {['All statuses', ...STATUS_OPTIONS].map((s) => (
+              <Chip key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)}>
+                {s === 'All statuses' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+              </Chip>
             ))}
-          </select>
+          </div>
         </div>
-      </div>
 
-      {/* Table */}
-      {loading ? (
-        <Card className="p-10 text-center">
-          <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-          <p className="mt-3 text-slate-400 font-medium">Loading experiences…</p>
-        </Card>
-      ) : error ? (
-        <Card className="p-10 text-center">
-          <p className="text-rose-600 font-semibold">{error}</p>
-          <Button variant="secondary" className="mt-4" onClick={() => void loadEvents()}>Retry</Button>
-        </Card>
-      ) : events.length > 0 ? (
-        <Table headers={['Title', 'Host Name', 'City', 'Date', 'Price', 'Bookings', 'Status', 'Actions']}>
-          {events.map((exp) => (
-            <tr key={exp.id} className="border-b border-slate-100 last:border-b-0 hover:bg-brand-50/40 transition">
-              <td className="px-6 py-4 align-top font-bold text-ink max-w-[220px]">{exp.title}</td>
-              <td className="px-6 py-4 align-top text-slate-700 font-medium">{exp.hostName}</td>
-              <td className="px-6 py-4 align-top text-slate-600">{exp.city}</td>
-              <td className="px-6 py-4 align-top text-slate-600 whitespace-nowrap">
-                {exp.date ? formatISTDateTime(exp.date) : '—'}
-                {exp.is_recurring && <div className="text-xs text-slate-400">Next · recurring</div>}
-              </td>
-              <td className="px-6 py-4 align-top font-extrabold text-ink">
-                {exp.isFree ? (
-                  <span className="text-emerald-600">Free</span>
-                ) : (
-                  <span className="inline-flex items-center gap-0.5">
-                    <IndianRupee className="h-3.5 w-3.5 stroke-[2.5]" />
-                    {exp.price.toLocaleString()}
-                  </span>
-                )}
-              </td>
-              <td className="px-6 py-4 align-top text-slate-600 font-medium">{exp.bookings}</td>
-              <td className="px-6 py-4 align-top">
-                <Badge color={statusColor(displayStatus(exp))}>{displayStatus(exp)}</Badge>
-              </td>
-              <td className="px-6 py-4 align-top">
-                <div className="flex items-center gap-2">
-                  <Button variant="action" onClick={() => navigate(`/experiences/${exp.id}/edit`)}>Edit</Button>
-                  {exp.status === 'paused' ? (
-                    <Button
-                      variant="action"
-                      className="border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800"
-                      disabled={resumingId === exp.id}
-                      onClick={() => void handleResume(exp)}
+        {/* Table */}
+        {loading ? (
+          <div className="rounded-3xl border border-white/[0.08] bg-[#121426]/80 p-12 text-center">
+            <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-[#A020F0] border-t-transparent" />
+            <p className="mt-3 text-sm text-white/50">Loading experiences…</p>
+          </div>
+        ) : error ? (
+          <div className="rounded-3xl border border-white/[0.08] bg-[#121426]/80 p-12 text-center">
+            <p className="font-semibold text-rose-300">{error}</p>
+            <button type="button" className={`mt-4 ${ghostBtn}`} onClick={() => void loadEvents()}>
+              Retry
+            </button>
+          </div>
+        ) : events.length > 0 ? (
+          <div className="overflow-x-auto rounded-3xl border border-white/[0.08] bg-[#121426]/80 backdrop-blur-xl">
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.08] text-[11px] font-semibold tracking-wider text-white/40 uppercase">
+                  <th className="px-6 py-4">Experience</th>
+                  <th className="px-4 py-4">City</th>
+                  <th className="px-4 py-4">Date</th>
+                  <th className="px-4 py-4">Price</th>
+                  <th className="px-4 py-4">Bookings</th>
+                  <th className="px-4 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((exp) => {
+                  const st = displayStatus(exp);
+                  return (
+                    <tr
+                      key={exp.id}
+                      className="border-b border-white/[0.06] transition last:border-b-0 hover:bg-white/[0.03]"
                     >
-                      {resumingId === exp.id ? 'Resuming…' : 'Resume'}
-                    </Button>
-                  ) : (
-                    exp.status === 'live' && (
-                      <Button
-                        variant="action"
-                        className="border-amber-200 text-amber-700 hover:border-amber-300 hover:text-amber-800"
-                        onClick={() => setPauseTarget(exp)}
-                      >
-                        Pause
-                      </Button>
-                    )
-                  )}
-                  <Button variant="action" onClick={() => setBookingEvent(exp)}>On-spot booking</Button>
-                  <Button
-                    variant="action"
-                    className="border-red-200 text-red-600 hover:border-red-300 hover:text-red-700"
-                    disabled={deletingId === exp.id}
-                    onClick={() => void handleDelete(exp)}
-                  >
-                    {deletingId === exp.id ? 'Deleting…' : 'Delete'}
-                  </Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </Table>
-      ) : (
-        <Card className="p-10 text-center">
-          <p className="text-slate-400 font-medium">No experience listings found.</p>
-        </Card>
-      )}
+                      <td className="max-w-[300px] px-6 py-4 align-top">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/experiences/${exp.id}/edit`)}
+                          className="block text-left font-semibold text-white transition hover:text-[#D8B4FE]"
+                        >
+                          {exp.title}
+                        </button>
+                        <p className="mt-0.5 truncate text-xs text-white/45">by {exp.hostName}</p>
+                      </td>
+                      <td className="px-4 py-4 align-top text-white/70">{exp.city || '—'}</td>
+                      <td className="px-4 py-4 align-top whitespace-nowrap text-white/70">
+                        {exp.date ? formatISTDateTime(exp.date) : '—'}
+                        {exp.is_recurring && (
+                          <div className="text-xs text-white/40">Next · recurring</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 align-top font-semibold text-white">
+                        {exp.isFree ? (
+                          <span className="text-emerald-300">Free</span>
+                        ) : (
+                          `₹${exp.price.toLocaleString()}`
+                        )}
+                      </td>
+                      <td className="px-4 py-4 align-top text-white/70">{exp.bookings}</td>
+                      <td className="px-4 py-4 align-top">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${STATUS_STYLE[st] ?? STATUS_STYLE.draft}`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                          {st}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 align-top">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/experiences/${exp.id}/edit`)}
+                            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 ${GRADIENT}`}
+                          >
+                            Edit
+                          </button>
+                          {exp.status === 'paused' ? (
+                            <button
+                              type="button"
+                              disabled={resumingId === exp.id}
+                              onClick={() => void handleResume(exp)}
+                              className={`${ghostBtn} !text-emerald-300`}
+                            >
+                              {resumingId === exp.id ? 'Resuming…' : 'Resume'}
+                            </button>
+                          ) : (
+                            exp.status === 'live' && (
+                              <button
+                                type="button"
+                                onClick={() => setPauseTarget(exp)}
+                                className={`${ghostBtn} !text-amber-300`}
+                              >
+                                Pause
+                              </button>
+                            )
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setBookingEvent(exp)}
+                            className={ghostBtn}
+                          >
+                            On-spot booking
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingId === exp.id}
+                            onClick={() => void handleDelete(exp)}
+                            aria-label={`Delete ${exp.title}`}
+                            title="Delete"
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-white/40 transition hover:bg-rose-500/15 hover:text-rose-300 disabled:opacity-50"
+                          >
+                            {deletingId === exp.id ? (
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-300 border-t-transparent" />
+                            ) : (
+                              <FiTrash2 size={15} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-white/[0.08] bg-[#121426]/80 p-12 text-center">
+            <p className="text-sm text-white/50">No experiences found.</p>
+          </div>
+        )}
 
-      {/* Server-side pagination */}
-      {!loading && !error && total > 0 && (
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} disabled={loading} />
-      )}
+        {/* Server-side pagination */}
+        {!loading && !error && total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+            <p className="text-xs text-white/45">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage(page - 1)}
+                aria-label="Previous page"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white transition hover:bg-white/10 disabled:opacity-30"
+              >
+                <FiChevronLeft size={16} />
+              </button>
+              <span className="px-2 text-xs font-semibold text-white/70">
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+                aria-label="Next page"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white transition hover:bg-white/10 disabled:opacity-30"
+              >
+                <FiChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
-      {bookingEvent && (
-        <OnSpotBookingModal
-          event={bookingEvent}
-          isOpen={bookingEvent !== null}
-          onClose={() => setBookingEvent(null)}
-          onBooked={() => void loadEvents()}
-        />
-      )}
+        {bookingEvent && (
+          <OnSpotBookingModal
+            event={bookingEvent}
+            isOpen={bookingEvent !== null}
+            onClose={() => setBookingEvent(null)}
+            onBooked={() => void loadEvents()}
+          />
+        )}
 
-      {pauseTarget && (
-        <PauseExperienceModal
-          event={pauseTarget}
-          saving={pausing}
-          onClose={() => setPauseTarget(null)}
-          onConfirm={(opts) => void handlePauseConfirm(opts)}
-        />
-      )}
+        {pauseTarget && (
+          <PauseExperienceModal
+            event={pauseTarget}
+            saving={pausing}
+            onClose={() => setPauseTarget(null)}
+            onConfirm={(opts) => void handlePauseConfirm(opts)}
+          />
+        )}
+      </div>
     </div>
   );
 };

@@ -18,22 +18,20 @@ export function ToastHost() {
       {items.map((t) => (
         <div
           key={t.id}
-          className={`flex items-start gap-3 rounded-xl border bg-white px-4 py-3 shadow-lg ${
-            t.kind === 'success' ? 'border-emerald-200' : 'border-rose-200'
-          }`}
+          className="flex items-start gap-3 rounded-2xl border border-white/[0.08] bg-[#14152a]/95 px-4 py-3.5 shadow-[0_18px_40px_-14px_rgba(0,0,0,0.7)] backdrop-blur-xl"
         >
           {t.kind === 'success' ? (
-            <FiCheckCircle className="mt-0.5 shrink-0 text-emerald-500" size={18} />
+            <FiCheckCircle className="mt-0.5 shrink-0 text-[#D8B4FE]" size={18} />
           ) : (
-            <FiAlertCircle className="mt-0.5 shrink-0 text-rose-500" size={18} />
+            <FiAlertCircle className="mt-0.5 shrink-0 text-rose-400" size={18} />
           )}
-          <p className="flex-1 whitespace-pre-line text-sm font-medium text-gray-800">
+          <p className="flex-1 whitespace-pre-line text-sm font-medium text-white">
             {t.message}
           </p>
           <button
             type="button"
             onClick={() => dismissToast(t.id)}
-            className="shrink-0 rounded p-0.5 text-gray-400 transition hover:text-gray-600"
+            className="shrink-0 rounded p-0.5 text-white/40 transition hover:text-white"
           >
             <FiX size={14} />
           </button>

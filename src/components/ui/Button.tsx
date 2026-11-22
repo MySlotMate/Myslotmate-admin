@@ -21,7 +21,7 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center font-bold tracking-tight rounded-xl transition-all duration-200 cursor-pointer select-none active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none disabled:transform-none';
+  const baseStyles = 'inline-flex items-center justify-center font-semibold rounded-full transition-all duration-200 cursor-pointer select-none active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none disabled:transform-none';
 
   const sizeStyles = {
     sm: 'px-3 py-1.5 text-xs gap-1.5',
@@ -30,12 +30,12 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    primary: 'bg-gradient-to-r from-brand-600 to-brand-500 text-white shadow-md shadow-brand-500/20 hover:from-brand-700 hover:to-brand-600 hover:shadow-lg hover:shadow-brand-500/30 border border-brand-500/30',
-    secondary: 'border border-slate-200/80 bg-white/90 text-slate-700 shadow-xs hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700',
-    action: 'border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700',
-    outline: 'border border-brand-200 bg-transparent text-brand-700 hover:bg-brand-50 hover:border-brand-300',
-    danger: 'bg-rose-50 text-rose-700 border border-rose-200/80 hover:bg-rose-100 hover:text-rose-800 hover:border-rose-300',
-    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent',
+    primary: 'bg-gradient-to-r from-[#7038F5] to-[#B724EA] text-white shadow-[0_10px_30px_-12px_rgba(183,36,234,0.7)] hover:opacity-90 border border-transparent',
+    secondary: 'border border-white/10 bg-white/[0.06] text-white/85 hover:bg-white/10 hover:text-white',
+    action: 'border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white',
+    outline: 'border border-[#B57BFF]/50 bg-transparent text-[#D8B4FE] hover:bg-[#7B2FFF]/15',
+    danger: 'border border-rose-400/25 bg-rose-500/[0.08] text-rose-300 hover:bg-rose-500/[0.15]',
+    ghost: 'border border-transparent bg-transparent text-white/60 hover:bg-white/[0.06] hover:text-white',
   };
 
   // Override size for legacy 'action' variant if size wasn't explicitly set

@@ -314,8 +314,8 @@ const MonthlyBookingsChart: React.FC<{ data: { month: string; count: number }[];
           const gy = padT + innerH - f * innerH;
           return (
             <g key={f}>
-              <line x1={padL} y1={gy} x2={w - padR} y2={gy} stroke="#eef2f7" strokeWidth="1" />
-              <text x={padL - 6} y={gy + 3} textAnchor="end" fontSize="9" fontWeight="700" fill="#94a3b8">{Math.round(max * f)}</text>
+              <line x1={padL} y1={gy} x2={w - padR} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+              <text x={padL - 6} y={gy + 3} textAnchor="end" fontSize="9" fontWeight="700" fill="rgba(255,255,255,0.4)">{Math.round(max * f)}</text>
             </g>
           );
         })}
@@ -332,7 +332,7 @@ const MonthlyBookingsChart: React.FC<{ data: { month: string; count: number }[];
         ))}
 
         {pts.map((p) => (
-          <text key={`x${p.i}`} x={p.x} y={H - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill="#94a3b8">{p.month}</text>
+          <text key={`x${p.i}`} x={p.x} y={H - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill="rgba(255,255,255,0.4)">{p.month}</text>
         ))}
 
         {/* hover / click hit areas */}
