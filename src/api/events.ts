@@ -262,6 +262,10 @@ export interface EventAttendee {
   user_phone?: string;
   user_avatar_url?: string | null;
   source?: 'online' | 'walk_in' | 'bulk_import';
+  /** Set when a monthly pass paid for this seat. */
+  pass_id?: string | null;
+  /** Set on a guest cancel after the refund cutoff: seat released, money kept. */
+  cancelled_at?: string | null;
 }
 
 // GET /events/{id}/attendees — every booking on the experience (admins skip

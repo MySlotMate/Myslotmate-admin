@@ -41,9 +41,11 @@ export function GuestList({ eventId }: { eventId: string }) {
   }
   if (rows.length === 0) return <p className="text-sm text-white/50">No bookings yet.</p>;
 
-  const active = rows.filter((b) => b.status === 'confirmed' || b.status === 'pending');
-  const guests = active.reduce((n, b) => n + b.quantity, 0);
-  const revenue = active.reduce((n, b) => n + (b.amount_cents ?? 0), 0);
+  // A late guest cancel keeps a confirmed row with cancelled_at: the seat is
+  // released (not a guest) but the money stays collected.
+  const kept = rows.filter((b) => b.status === 'confirmed' || b.status === 'pending');
+  const guests = kept.filter((b) => !b.cancelled_at).reduce((n, b) => n + b.quantity, 0);
+  const revenue = kept.reduce((n, b) => n + (b.amount_cents ?? 0), 0);
 
   const bySession = new Map<string, EventAttendee[]>();
   for (const b of rows) {
@@ -99,11 +101,18 @@ export function GuestList({ eventId }: { eventId: string }) {
                     ) : null}
                   </p>
                   <p className="mt-0.5 flex items-center justify-end gap-1.5">
+                    {b.pass_id && (
+                      <span className="rounded-full bg-[#9B30FF]/15 px-2 py-0.5 text-[11px] font-semibold text-[#D8B4FE]">
+                        Pass
+                      </span>
+                    )}
                     {b.source && SOURCE[b.source] && (
                       <span className="text-[11px] text-white/40">{SOURCE[b.source]}</span>
                     )}
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STATUS[b.status]}`}>
-                      {b.status}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STATUS[b.cancelled_at ? 'cancelled' : b.status]}`}
+                    >
+                      {b.cancelled_at && b.status === 'confirmed' ? 'cancelled late' : b.status}
                     </span>
                   </p>
                 </div>
