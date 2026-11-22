@@ -12,6 +12,7 @@ import {
   type AdminWhatsAppNumber,
 } from '../../api/settings';
 import { Phone, Plus, Trash2, Check, ShieldAlert, Loader2 } from 'lucide-react';
+import { TaxSettingsCard } from './TaxSettingsCard';
 
 export const SettingsManager: React.FC = () => {
   const {
@@ -368,6 +369,9 @@ export const SettingsManager: React.FC = () => {
             </p>
           )}
         </Card>
+
+        {/* Statutory tax on host payouts */}
+        <TaxSettingsCard />
 
         {/* Admin WhatsApp Alert Recipients */}
         <Card className="p-6 col-span-full">
