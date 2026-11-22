@@ -109,7 +109,7 @@ interface FormData {
   // on a free one.
   monthlyPassEnabled: boolean;
   monthlyPassPriceStr: string;
-  monthlyPassSessionsStr: string; // '' = every session
+  monthlyPassSessionsStr: string; // required when the pass is on
   monthlyPassCapacityStr: string; // '' = unlimited passes
   eventDate: string;
   eventTime: string;
@@ -1214,6 +1214,18 @@ export const CreateExperience: React.FC = () => {
       toast.error('Please set a monthly pass price, or switch the pass off');
       return false;
     }
+    // A pass is a balance of sessions the guest spends one at a time, so it
+    // must say how many it holds.
+    if (
+      form.monthlyPassEnabled &&
+      form.scheduleType !== 'one_time' &&
+      !form.isFree &&
+      !(Number(form.monthlyPassSessionsStr) >= 1)
+    ) {
+      setShowErrors(true);
+      toast.error('Set how many sessions the monthly pass includes');
+      return false;
+    }
     if (!form.isFree && !form.useTiers && form.priceCents <= 0) {
       setShowErrors(true);
       toast.error('Please set a valid price');
@@ -2269,7 +2281,7 @@ export const CreateExperience: React.FC = () => {
                             onChange={(e) =>
                               updateForm('monthlyPassSessionsStr', e.target.value)
                             }
-                            placeholder="All"
+                            placeholder="e.g. 8"
                             className={ROW_INPUT}
                           />
                         </Row>
