@@ -167,7 +167,7 @@ export interface EventDetail {
   session_windows?: ApiSessionWindow[] | null;
   private_access_mode?: PrivateAccessMode;
   cancellation_policy: string | null;
-  price_tiers: { id: string; name: string; price_cents: number }[] | null;
+  price_tiers: { id: string; name: string; price_cents: number; capacity?: number | null }[] | null;
   monthly_pass_price_cents?: number | null;
   monthly_pass_session_limit?: number | null;
   monthly_pass_capacity?: number | null;

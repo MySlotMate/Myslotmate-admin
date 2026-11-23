@@ -52,7 +52,7 @@ import {
 } from '../../api/events';
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
-import CouponsManager from './CouponsManager';
+import CodesPanel from './CodesPanel';
 import { GuestList } from './GuestList';
 import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
@@ -2159,18 +2159,11 @@ export const CreateExperience: React.FC = () => {
                             <p className="px-1 text-sm text-white/60">
                               Each guest gets a single-use code that unlocks booking.{' '}
                               {isEdit
-                                ? 'Generate them below.'
+                                ? 'Make them in Codes below.'
                                 : 'Save the experience first, then generate them here.'}
                             </p>
                           )}
                         </>
-                      )}
-                      {isEdit && editEventId && selectedHost?.id && (
-                        <CouponsManager
-                          eventId={editEventId}
-                          hostId={selectedHost.id}
-                          kind="access"
-                        />
                       )}
                     </div>
                   )}
@@ -2338,14 +2331,21 @@ export const CreateExperience: React.FC = () => {
                   </MoreOptions>
                 )}
 
-                {isEdit && editEventId && selectedHost?.id && !form.isFree && (
-                  <MoreOptions title="Coupons & free codes" summary="Discounts and comps">
-                    <CouponsManager
+                {isEdit && editEventId && selectedHost?.id && (
+                  <MoreOptions title="Codes" summary="Unlock, % off or free">
+                    <CodesPanel
                       eventId={editEventId}
                       hostId={selectedHost.id}
-                      kind="discount"
+                      isFree={form.isFree}
+                      codeGated={form.isPrivate && form.privateAccessMode === 'passkey'}
+                      sharedPasskey={
+                        form.isPrivate &&
+                        form.privateAccessMode === 'passkey' &&
+                        form.accessMode === 'shared'
+                          ? form.accessPasskey
+                          : ''
+                      }
                     />
-                    <CouponsManager eventId={editEventId} hostId={selectedHost.id} kind="free" />
                   </MoreOptions>
                 )}
 
