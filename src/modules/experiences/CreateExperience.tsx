@@ -55,6 +55,13 @@ import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
 import CodesPanel from './CodesPanel';
 import GuestPaymentCard from './GuestPaymentCard';
 import NeedsAttention from './NeedsAttention';
+import {
+  accessPayload,
+  firstProblem,
+  hookLineWithFallback,
+  pricingPayload,
+  whoCanBookLabel,
+} from '../../lib/experienceForm';
 import { GuestList } from './GuestList';
 import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
@@ -1111,142 +1118,45 @@ export const CreateExperience: React.FC = () => {
   /* ---------------------------------------------------------------- */
   /*  Validation                                                       */
   /* ---------------------------------------------------------------- */
-  const validateStep1 = (): boolean => {
+  // The 1:1 availability error, if the windows don't make any sessions.
+  const oneOnOneProblem = (): string | null => {
+    if (form.sessionType !== 'one_on_one') return null;
+    const { errors, count } = form.sessionIsWeekly
+      ? (() => {
+          const r = generateWeeklySessions(
+            form.sessionWindows,
+            form.durationMinutes,
+            form.breakMinutes,
+          );
+          return { errors: r.errors, count: r.perWeek };
+        })()
+      : (() => {
+          const r = generateSessionSlots(
+            form.sessionWindows,
+            form.durationMinutes,
+            form.breakMinutes,
+          );
+          return { errors: r.errors, count: r.slots.length };
+        })();
+    if (errors.length > 0) return errors[0] ?? null;
+    if (count === 0) return "Your availability windows don't fit a single session";
+    return null;
+  };
+
+  // The host to act for, then the shared rules (same as the host editors).
+  const validateForPublish = (): boolean => {
     if (!selectedHost?.id) {
       setShowErrors(true);
       toast.error('Please select the host to create this experience for');
       return false;
     }
-    if (!form.title.trim()) {
+    const problem = firstProblem(form, {
+      publish: true,
+      sessionProblem: oneOnOneProblem(),
+    });
+    if (problem) {
       setShowErrors(true);
-      toast.error('Please enter an experience title');
-      return false;
-    }
-    if (!form.hookLine.trim()) {
-      setShowErrors(true);
-      toast.error('Please enter a hook line');
-      return false;
-    }
-    if (!form.mood) {
-      setShowErrors(true);
-      toast.error('Please select a mood');
-      return false;
-    }
-    if (!form.description.trim()) {
-      setShowErrors(true);
-      toast.error('Please add a description');
-      return false;
-    }
-    return true;
-  };
-
-  const validateStep2 = (): boolean => {
-    if (form.sessionType === 'one_on_one') {
-      const { errors, count } = form.sessionIsWeekly
-        ? (() => {
-            const r = generateWeeklySessions(
-              form.sessionWindows,
-              form.durationMinutes,
-              form.breakMinutes,
-            );
-            return { errors: r.errors, count: r.perWeek };
-          })()
-        : (() => {
-            const r = generateSessionSlots(
-              form.sessionWindows,
-              form.durationMinutes,
-              form.breakMinutes,
-            );
-            return { errors: r.errors, count: r.slots.length };
-          })();
-      if (errors.length > 0) {
-        setShowErrors(true);
-        toast.error(errors[0]);
-        return false;
-      }
-      if (count === 0) {
-        setShowErrors(true);
-        toast.error("Your availability windows don't fit a single session");
-        return false;
-      }
-    } else if (form.scheduleType === 'custom_dates') {
-      const valid = form.customDatesList.filter((s) => s.date && s.time);
-      if (valid.length === 0) {
-        setShowErrors(true);
-        toast.error('Please add at least one custom date and time slot');
-        return false;
-      }
-    } else {
-      if (!form.eventDate) {
-        setShowErrors(true);
-        toast.error('Please select an event date');
-        return false;
-      }
-      if (!form.eventTime) {
-        setShowErrors(true);
-        toast.error('Please select a start time');
-        return false;
-      }
-    }
-    if (
-      form.monthlyPassEnabled &&
-      form.scheduleType !== 'one_time' &&
-      !form.isFree &&
-      Number(form.monthlyPassPriceStr) <= 0
-    ) {
-      setShowErrors(true);
-      toast.error('Please set a monthly pass price, or switch the pass off');
-      return false;
-    }
-    // A pass is a balance of sessions the guest spends one at a time, so it
-    // must say how many it holds.
-    if (
-      form.monthlyPassEnabled &&
-      form.scheduleType !== 'one_time' &&
-      !form.isFree &&
-      !(Number(form.monthlyPassSessionsStr) >= 1)
-    ) {
-      setShowErrors(true);
-      toast.error('Set how many sessions the monthly pass includes');
-      return false;
-    }
-    if (!form.isFree && !form.useTiers && form.priceCents <= 0) {
-      setShowErrors(true);
-      toast.error('Please set a valid price');
-      return false;
-    }
-    if (
-      !form.isFree &&
-      form.useTiers &&
-      form.priceTiers.filter((t) => t.name.trim() && Number(t.priceStr) > 0)
-        .length === 0
-    ) {
-      setShowErrors(true);
-      toast.error('Add at least one ticket type with a name and price');
-      return false;
-    }
-    if (
-      form.isPrivate &&
-      form.privateAccessMode === 'passkey' &&
-      form.accessMode === 'shared' &&
-      !form.accessPasskey.trim()
-    ) {
-      setShowErrors(true);
-      toast.error('A private experience needs a passkey');
-      return false;
-    }
-    // An RSVP host approves people on the strength of what they submit, so the
-    // request form can't be empty — without required fields every request would
-    // arrive as a bare name and there'd be nothing to judge.
-    if (
-      form.isPrivate &&
-      form.privateAccessMode === 'rsvp' &&
-      (!form.requiresAttendeeDetails || form.attendeeFields.length === 0)
-    ) {
-      setShowErrors(true);
-      toast.error(
-        'Request-to-join needs attendee details — turn them on and pick at least one field',
-      );
+      toast.error(problem);
       return false;
     }
     return true;
@@ -1263,7 +1173,7 @@ export const CreateExperience: React.FC = () => {
         toast.error('Add a title before saving as draft');
         return;
       }
-    } else if (!validateStep1() || !validateStep2()) {
+    } else if (!validateForPublish()) {
       return;
     }
     const hostId = selectedHost?.id;
@@ -1373,7 +1283,7 @@ export const CreateExperience: React.FC = () => {
       const payload = {
         host_id: hostId,
         title: form.title.trim(),
-        hook_line: form.hookLine.trim(),
+        hook_line: hookLineWithFallback(form),
         mood: form.mood,
         description: form.description.trim(),
         cover_image_url: coverImageUrl,
@@ -1392,31 +1302,7 @@ export const CreateExperience: React.FC = () => {
         max_group_size: form.sessionType === 'one_on_one' ? 1 : form.maxGroupSize,
         languages: form.languages,
         level: form.level || undefined,
-        price_cents: form.isFree || form.useTiers ? 0 : form.priceCents,
-        is_free: form.isFree,
-        price_tiers:
-          !form.isFree && form.useTiers
-            ? form.priceTiers
-                .filter((t) => t.name.trim() && Number(t.priceStr) > 0)
-                .map((t) => ({
-                  name: t.name.trim(),
-                  price_cents: Math.round(Number(t.priceStr) * 100),
-                  // Blank = no limit of its own (event capacity still applies).
-                  ...(Number(t.seatsStr) > 0 ? { capacity: Math.floor(Number(t.seatsStr)) } : {}),
-                }))
-            : undefined,
-        monthly_pass: {
-          price_cents:
-            form.monthlyPassEnabled && !form.isFree && form.scheduleType !== 'one_time'
-              ? Math.round(Number(form.monthlyPassPriceStr) * 100)
-              : 0,
-          session_limit: form.monthlyPassSessionsStr
-            ? Number(form.monthlyPassSessionsStr)
-            : undefined,
-          capacity: form.monthlyPassCapacityStr
-            ? Number(form.monthlyPassCapacityStr)
-            : undefined,
-        },
+        ...pricingPayload(form),
         schedule_type: isWeeklyOneOnOne ? ('recurring' as const) : form.scheduleType,
         custom_dates: isWeeklyOneOnOne
           ? []
@@ -1442,14 +1328,7 @@ export const CreateExperience: React.FC = () => {
         terms_and_conditions: form.termsAndConditions.trim() || undefined,
         requires_attendee_details: form.requiresAttendeeDetails,
         attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
-        is_private: form.isPrivate,
-        private_access_mode: form.privateAccessMode,
-        // Shared mode sends the one passkey; unique mode clears it (access comes
-        // from the per-guest access codes). A public event clears it server-side.
-        access_passkey:
-          form.isPrivate && form.accessMode === 'shared'
-            ? form.accessPasskey.trim()
-            : '',
+        ...accessPayload(form),
       };
 
       if (isEdit && editEventId) {
@@ -2046,13 +1925,7 @@ export const CreateExperience: React.FC = () => {
               <div>
                 <MoreOptions
                   title="Who can book?"
-                  summary={
-                    form.isPrivate
-                      ? form.privateAccessMode === 'rsvp'
-                        ? 'People I approve'
-                        : 'People with a code'
-                      : 'Anyone'
-                  }
+                  summary={whoCanBookLabel(form.isPrivate, form.privateAccessMode)}
                   defaultOpen={form.isPrivate}
                 >
                   {/* Who can book: anyone = public; code = private + passkey gate;
