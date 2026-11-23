@@ -137,3 +137,40 @@ function extractMessage(parsed: unknown): string | null {
 }
 
 export const apiBaseUrl = BASE_URL;
+
+// apiDownload fetches a file (PDF, CSV) with the admin token and saves it on
+// the device. apiFetch reads bodies as text, which would corrupt a PDF.
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, { headers });
+  } catch {
+    throw new ApiError(0, 'Unable to reach the server. Check your connection and try again.');
+  }
+  if (!response.ok) {
+    let message = response.statusText || 'Download failed';
+    try {
+      const body = (await response.json()) as { message?: string; error?: string };
+      message = body.message ?? body.error ?? message;
+    } catch {
+      /* not JSON */
+    }
+    if (response.status === 401) {
+      setToken(null);
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+      throw new UnauthorizedError(message);
+    }
+    throw new ApiError(response.status, message);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

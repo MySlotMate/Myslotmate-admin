@@ -23,6 +23,7 @@ import { ReportsDirectory } from './modules/reports/ReportsDirectory';
 import { BlogsDirectory } from './modules/blogs/BlogsDirectory';
 import { MarketingDirectory } from './modules/marketing/MarketingDirectory';
 import { NotificationsComposer } from './modules/notifications/NotificationsComposer';
+import { BillingPage } from './modules/billing/BillingPage';
 import { SettingsManager } from './modules/settings/SettingsManager';
 
 interface RouteProps {
@@ -103,6 +104,7 @@ const AppContent: React.FC = () => {
                 <Route path="/bookings" element={<BookingsDirectory searchQuery={globalSearch} />} />
                 <Route path="/join-requests" element={<JoinRequestsDirectory />} />
                 <Route path="/payments" element={<PaymentsDirectory />} />
+                <Route path="/billing" element={<BillingPage />} />
                 <Route path="/cities" element={<CitiesDirectory />} />
                 <Route path="/reviews" element={<ReviewsDirectory />} />
                 <Route path="/reports" element={<ReportsDirectory />} />

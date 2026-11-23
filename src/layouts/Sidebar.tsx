@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Inbox,
   CreditCard,
+  Receipt,
   MapPin,
   Star,
   AlertTriangle,
@@ -43,6 +44,7 @@ const SECTIONS = [
       { name: 'Bookings', path: '/bookings', icon: CalendarDays },
       { name: 'Join requests', path: '/join-requests', icon: Inbox },
       { name: 'Payments', path: '/payments', icon: CreditCard },
+      { name: 'Billing', path: '/billing', icon: Receipt },
     ],
   },
   {
