@@ -13,6 +13,7 @@ import {
   Star,
   AlertTriangle,
   FileText,
+  Globe,
   Megaphone,
   Bell,
   Settings as SettingsIcon,
@@ -57,6 +58,7 @@ const SECTIONS = [
     title: 'Growth',
     items: [
       { name: 'Blogs', path: '/blogs', icon: FileText },
+      { name: 'Event marketing', path: '/event-marketing', icon: Globe },
       { name: 'Marketing', path: '/marketing', icon: Megaphone },
       { name: 'Notifications', path: '/notifications', icon: Bell },
     ],
@@ -70,7 +72,12 @@ const SECTIONS = [
 const COLLAPSE_KEY = 'msm_sidebar_collapsed';
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  // The marketing login sees only its own section (see App.tsx).
+  const sections =
+    user?.role === 'marketing'
+      ? [{ title: 'Growth', items: [{ name: 'Event marketing', path: '/event-marketing', icon: Globe }] }]
+      : SECTIONS;
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem(COLLAPSE_KEY) === '1');
 
   useEffect(() => {
@@ -147,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className={`mt-4 flex-1 space-y-4 pr-0.5 ${collapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <div key={section.title} className="space-y-1">
               <p className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30 ${labelCls}`}>
                 {section.title}
