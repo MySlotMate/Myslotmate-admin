@@ -53,11 +53,11 @@ import {
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
 import CodesPanel from './CodesPanel';
+import GuestPaymentCard from './GuestPaymentCard';
 import { GuestList } from './GuestList';
 import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
 import {
-  AddPill,
   Chip,
   CoverPoster,
   FIELD,
@@ -936,24 +936,7 @@ export const CreateExperience: React.FC = () => {
   }, [form.slug, isEdit, editEventId]);
 
   // Ticket-tier row helpers (dynamic pricing).
-  const addPriceTier = () =>
-    updateForm('priceTiers', [...form.priceTiers, { name: '', priceStr: '' }]);
-  const removePriceTier = (index: number) =>
-    updateForm(
-      'priceTiers',
-      form.priceTiers.filter((_, i) => i !== index),
-    );
-  const updatePriceTier = (
-    index: number,
-    field: 'name' | 'priceStr' | 'seatsStr',
-    value: string,
-  ) =>
-    updateForm(
-      'priceTiers',
-      form.priceTiers.map((t, i) =>
-        i === index ? { ...t, [field]: value } : t,
-      ),
-    );
+
 
   // Toggle a language in/out of the multi-select list.
   const toggleLanguage = (lang: string) => {
@@ -964,7 +947,6 @@ export const CreateExperience: React.FC = () => {
         : [...prev.languages, lang],
     }));
   };
-
   // Free-text language input for the "Other" option.
   const [customLanguage, setCustomLanguage] = useState('');
   const addCustomLanguage = () => {
@@ -2025,7 +2007,7 @@ export const CreateExperience: React.FC = () => {
             </Section>
 
             {/* Tickets */}
-            <Section title={isOneOnOne ? 'Price' : 'Tickets'}>
+            <Section title="How do guests pay?">
               {!isOneOnOne && (
                 <Rows>
                   <Row label="Slots">
@@ -2046,17 +2028,13 @@ export const CreateExperience: React.FC = () => {
                   { value: 'free', label: 'Free' },
                 ]}
               />
-              {!form.isFree && !form.useTiers && (
-                <Rows>
-                  <Row label="Price per person (₹)" error={err(form.priceCents <= 0)}>
-                    <NumberInput
-                      value={form.priceCents / 100}
-                      decimal
-                      onChange={(v) => updateForm('priceCents', Math.round(v * 100))}
-                      ariaLabel="Price per person"
-                    />
-                  </Row>
-                </Rows>
+              {!form.isFree && (
+                <GuestPaymentCard
+                  value={form}
+                  onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                  repeating={form.scheduleType !== 'one_time'}
+                  showErrors={showErrors}
+                />
               )}
             </Section>
 
@@ -2205,131 +2183,7 @@ export const CreateExperience: React.FC = () => {
                   </Rows>
                 </MoreOptions>
 
-                {!form.isFree && (
-                  <MoreOptions
-                    title="Ticket types & monthly pass"
-                    summary={
-                      form.useTiers
-                        ? `${form.priceTiers.length} ticket types`
-                        : form.monthlyPassEnabled
-                          ? 'One price · pass on'
-                          : 'One price'
-                    }
-                  >
-                    <Segmented<'single' | 'tiers'>
-                      value={form.useTiers ? 'tiers' : 'single'}
-                      onChange={(v) => updateForm('useTiers', v === 'tiers')}
-                      options={[
-                        { value: 'single', label: 'Single price' },
-                        { value: 'tiers', label: 'Multiple ticket types' },
-                      ]}
-                    />
-                    {form.useTiers && (
-                      <div className="space-y-2">
-                        {form.priceTiers.map((tier, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={tier.name}
-                              onChange={(e) => updatePriceTier(index, 'name', e.target.value)}
-                              placeholder="Ticket name, e.g. VIP"
-                              className={`${FIELD} !py-2.5`}
-                            />
-                            <input
-                              type="number"
-                              min={0}
-                              value={tier.priceStr}
-                              onChange={(e) =>
-                                updatePriceTier(index, 'priceStr', e.target.value)
-                              }
-                              placeholder="₹ Price"
-                              className={`${FIELD} !w-32 !py-2.5`}
-                            />
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={tier.seatsStr ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val === '' || /^\d+$/.test(val)) updatePriceTier(index, 'seatsStr', val);
-                              }}
-                              placeholder="Seats"
-                              aria-label="Seats per session (blank = no limit)"
-                              title="Seats per session. Leave blank for no limit."
-                              className={`${FIELD} !w-24 !py-2.5`}
-                            />
-                            {form.priceTiers.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removePriceTier(index)}
-                                className="p-1.5 text-white/40 transition hover:text-red-400"
-                                aria-label="Remove ticket type"
-                              >
-                                <FiX className="h-5 w-5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <AddPill onClick={addPriceTier}>Add another ticket type</AddPill>
-                        <p className="px-1 text-xs text-white/40">
-                          Seats caps a ticket type per session (e.g. 10 Gold). Leave blank for no limit.
-                        </p>
-                      </div>
-                    )}
-                    <ToggleRow
-                      label="Monthly pass"
-                      hint={
-                        form.scheduleType === 'one_time'
-                          ? 'Repeating or several-dates events only.'
-                          : 'Guests pay once and attend for 30 days.'
-                      }
-                      checked={form.monthlyPassEnabled}
-                      disabled={form.scheduleType === 'one_time'}
-                      onChange={(next) => updateForm('monthlyPassEnabled', next)}
-                    />
-                    {form.monthlyPassEnabled && form.scheduleType !== 'one_time' && (
-                      <Rows>
-                        <Row
-                          label="Pass price (₹)"
-                          error={err(Number(form.monthlyPassPriceStr) <= 0)}
-                        >
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.monthlyPassPriceStr}
-                            onChange={(e) => updateForm('monthlyPassPriceStr', e.target.value)}
-                            placeholder="2500"
-                            className={ROW_INPUT}
-                          />
-                        </Row>
-                        <Row label="Sessions included">
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.monthlyPassSessionsStr}
-                            onChange={(e) =>
-                              updateForm('monthlyPassSessionsStr', e.target.value)
-                            }
-                            placeholder="e.g. 8"
-                            className={ROW_INPUT}
-                          />
-                        </Row>
-                        <Row label="Passes available">
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.monthlyPassCapacityStr}
-                            onChange={(e) =>
-                              updateForm('monthlyPassCapacityStr', e.target.value)
-                            }
-                            placeholder="Unlimited"
-                            className={ROW_INPUT}
-                          />
-                        </Row>
-                      </Rows>
-                    )}
-                  </MoreOptions>
-                )}
+                
 
                 {isEdit && editEventId && selectedHost?.id && (
                   <MoreOptions title="Codes" summary="Unlock, % off or free">
