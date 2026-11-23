@@ -54,6 +54,7 @@ import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
 import CodesPanel from './CodesPanel';
 import GuestPaymentCard from './GuestPaymentCard';
+import NeedsAttention from './NeedsAttention';
 import { GuestList } from './GuestList';
 import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
@@ -1730,6 +1731,8 @@ export const CreateExperience: React.FC = () => {
                 />
               </div>
             </div>
+
+            {isEdit && editEventId && <NeedsAttention eventId={editEventId} />}
 
             {/* What */}
             <section className="space-y-4">
