@@ -104,3 +104,48 @@ export const downloadGSTTable = (month: string, table: GSTTable) =>
     `/admin/billing/reports/gst?month=${encodeURIComponent(month)}&format=csv&table=${table}`,
     `gst-${table}-${month}.csv`,
   );
+
+export interface HostStatementLine {
+  kind: 'booking' | 'pass';
+  id: string;
+  date: string;
+  event_title: string;
+  quantity: number;
+  ticket_cents: number;
+  commission_cents: number;
+  tcs_cents: number;
+  tds_cents: number;
+  payable_cents: number;
+  status: string;
+  refunded: boolean;
+}
+
+export interface HostStatement {
+  month: string;
+  host: { id: string; name: string; email: string; pan_masked?: string; gstin?: string };
+  lines: HostStatementLine[];
+  payouts: { id: string; date: string; amount_cents: number; status: string; reference: string }[];
+  totals: {
+    sales: number;
+    ticket_cents: number;
+    refunded_cents: number;
+    net_ticket_cents: number;
+    commission_cents: number;
+    tcs_cents: number;
+    tds_cents: number;
+    payable_cents: number;
+    paid_out_cents: number;
+    in_flight_cents: number;
+  };
+}
+
+export const fetchHostStatement = (hostId: string, month: string) =>
+  apiFetch<HostStatement>(
+    `/billing/host-statement?host_id=${encodeURIComponent(hostId)}&month=${encodeURIComponent(month)}`,
+  );
+
+export const downloadHostStatement = (hostId: string, month: string, hostName: string) =>
+  apiDownload(
+    `/billing/host-statement?host_id=${encodeURIComponent(hostId)}&month=${encodeURIComponent(month)}&format=pdf`,
+    `MySlotMate-statement-${month}-${hostName.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
+  );

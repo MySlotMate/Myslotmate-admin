@@ -18,6 +18,7 @@ import {
   type GSTTable,
   type GSTTotals,
 } from '../../api/billing';
+import { HostStatementsTab } from './HostStatementsTab';
 
 // Billing: the platform fee invoices and credit notes MySlotMate issues to
 // guests (billing core), the monthly GST report finance files GSTR-1 from, and
@@ -41,13 +42,14 @@ const dateIST = (iso: string) =>
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
-type Tab = 'invoices' | 'report' | 'settings';
+type Tab = 'invoices' | 'report' | 'statements' | 'settings';
 
 export const BillingPage: React.FC = () => {
   const [tab, setTab] = useState<Tab>('invoices');
   const tabs: { key: Tab; label: string }[] = [
     { key: 'invoices', label: 'Invoices' },
     { key: 'report', label: 'GST report' },
+    { key: 'statements', label: 'Host statements' },
     { key: 'settings', label: 'Settings' },
   ];
   return (
@@ -79,6 +81,7 @@ export const BillingPage: React.FC = () => {
       </div>
       {tab === 'invoices' && <InvoicesTab />}
       {tab === 'report' && <ReportTab />}
+      {tab === 'statements' && <HostStatementsTab />}
       {tab === 'settings' && <SettingsTab />}
     </div>
   );
