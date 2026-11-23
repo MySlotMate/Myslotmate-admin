@@ -1722,7 +1722,11 @@ export const CreateExperience: React.FC = () => {
                 ) : (
                   <LuGlobe className="h-3.5 w-3.5 text-[#D8B4FE]" />
                 )}
-                {form.isPrivate ? 'Private event' : 'Public event'}
+                {!form.isPrivate
+                  ? 'Anyone can book'
+                  : form.privateAccessMode === 'rsvp'
+                    ? 'People I approve'
+                    : 'People with a code'}
               </button>
               <div className="ml-auto w-full sm:w-auto">
                 <Segmented<'group' | 'one_on_one'>
@@ -2060,37 +2064,50 @@ export const CreateExperience: React.FC = () => {
             <Section title="More options" hint="All optional. Open one to change it.">
               <div>
                 <MoreOptions
-                  title="Who can see it"
+                  title="Who can book?"
                   summary={
                     form.isPrivate
                       ? form.privateAccessMode === 'rsvp'
-                        ? 'Private · request to join'
-                        : 'Private · passkey'
-                      : 'Public'
+                        ? 'People I approve'
+                        : 'People with a code'
+                      : 'Anyone'
                   }
                   defaultOpen={form.isPrivate}
                 >
-                  <Segmented<'public' | 'private'>
-                    value={form.isPrivate ? 'private' : 'public'}
-                    onChange={(v) => updateForm('isPrivate', v === 'private')}
+                  {/* Who can book: anyone = public; code = private + passkey gate;
+                      approve = private + rsvp gate. Access only, never price. */}
+                  <Segmented<'anyone' | 'code' | 'approve'>
+                    value={
+                      !form.isPrivate
+                        ? 'anyone'
+                        : form.privateAccessMode === 'rsvp'
+                          ? 'approve'
+                          : 'code'
+                    }
+                    onChange={(v) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        isPrivate: v !== 'anyone',
+                        ...(v !== 'anyone' && {
+                          privateAccessMode: v === 'approve' ? 'rsvp' : 'passkey',
+                        }),
+                      }))
+                    }
                     options={[
-                      { value: 'public', label: 'Public' },
-                      { value: 'private', label: 'Private' },
+                      { value: 'anyone', label: 'Anyone' },
+                      { value: 'code', label: 'People with a code' },
+                      { value: 'approve', label: 'People I approve' },
                     ]}
                   />
+                  <p className="px-1 text-xs leading-5 text-white/45">
+                    {!form.isPrivate
+                      ? 'Anyone on MySlotMate can find and book it.'
+                      : form.privateAccessMode === 'rsvp'
+                        ? 'Listed with a lock. Guests request to join; the host approves each one.'
+                        : 'Listed with a lock. Guests enter a code to book; they still pay the normal price.'}
+                  </p>
                   {form.isPrivate && (
                     <div className="space-y-4">
-                      <p className="px-1 text-xs leading-5 text-white/45">
-                        Still shown in discovery with a lock. Guests need a way in to book.
-                      </p>
-                      <Segmented<'passkey' | 'rsvp'>
-                        value={form.privateAccessMode}
-                        onChange={(v) => updateForm('privateAccessMode', v)}
-                        options={[
-                          { value: 'passkey', label: 'Unlock with a code' },
-                          { value: 'rsvp', label: 'Request to join' },
-                        ]}
-                      />
                       {form.privateAccessMode === 'rsvp' ? (
                         <div className="space-y-1.5 rounded-2xl border border-white/[0.06] bg-[#131328] px-4 py-3.5 text-sm text-white/70">
                           <p>
@@ -2107,14 +2124,14 @@ export const CreateExperience: React.FC = () => {
                             value={form.accessMode}
                             onChange={(v) => updateForm('accessMode', v)}
                             options={[
-                              { value: 'shared', label: 'One passkey' },
+                              { value: 'shared', label: 'One code for everyone' },
                               { value: 'unique', label: 'Code per guest' },
                             ]}
                           />
                           {form.accessMode === 'shared' ? (
                             <Rows>
                               <Row
-                                label="Passkey"
+                                label="Code"
                                 error={err(!form.accessPasskey.trim())}
                               >
                                 <input
