@@ -52,12 +52,20 @@ import {
 } from '../../api/events';
 import type { ExperienceTemplate } from '../../api/events';
 import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
-import CouponsManager from './CouponsManager';
+import CodesPanel from './CodesPanel';
+import GuestPaymentCard from './GuestPaymentCard';
+import NeedsAttention from './NeedsAttention';
+import {
+  accessPayload,
+  firstProblem,
+  hookLineWithFallback,
+  pricingPayload,
+  whoCanBookLabel,
+} from '../../lib/experienceForm';
 import { GuestList } from './GuestList';
 import { fetchHosts, fetchHostDetail } from '../../api/directory';
 import type { Host } from '../../types';
 import {
-  AddPill,
   Chip,
   CoverPoster,
   FIELD,
@@ -103,7 +111,7 @@ interface FormData {
   isFree: boolean;
   priceCents: number;
   useTiers: boolean;
-  priceTiers: { name: string; priceStr: string }[];
+  priceTiers: { name: string; priceStr: string; seatsStr?: string }[];
   // Monthly pass: one payment covers a month of sessions. Recurring, paid
   // experiences only — nothing repeats on a one-time event, nothing is saved
   // on a free one.
@@ -826,6 +834,7 @@ export const CreateExperience: React.FC = () => {
             ? ev.price_tiers!.map((t) => ({
                 name: t.name,
                 priceStr: (t.price_cents / 100).toString(),
+                seatsStr: t.capacity ? String(t.capacity) : '',
               }))
             : [{ name: '', priceStr: '' }],
           monthlyPassEnabled: !!ev.monthly_pass_price_cents,
@@ -935,24 +944,7 @@ export const CreateExperience: React.FC = () => {
   }, [form.slug, isEdit, editEventId]);
 
   // Ticket-tier row helpers (dynamic pricing).
-  const addPriceTier = () =>
-    updateForm('priceTiers', [...form.priceTiers, { name: '', priceStr: '' }]);
-  const removePriceTier = (index: number) =>
-    updateForm(
-      'priceTiers',
-      form.priceTiers.filter((_, i) => i !== index),
-    );
-  const updatePriceTier = (
-    index: number,
-    field: 'name' | 'priceStr',
-    value: string,
-  ) =>
-    updateForm(
-      'priceTiers',
-      form.priceTiers.map((t, i) =>
-        i === index ? { ...t, [field]: value } : t,
-      ),
-    );
+
 
   // Toggle a language in/out of the multi-select list.
   const toggleLanguage = (lang: string) => {
@@ -963,7 +955,6 @@ export const CreateExperience: React.FC = () => {
         : [...prev.languages, lang],
     }));
   };
-
   // Free-text language input for the "Other" option.
   const [customLanguage, setCustomLanguage] = useState('');
   const addCustomLanguage = () => {
@@ -1127,142 +1118,45 @@ export const CreateExperience: React.FC = () => {
   /* ---------------------------------------------------------------- */
   /*  Validation                                                       */
   /* ---------------------------------------------------------------- */
-  const validateStep1 = (): boolean => {
+  // The 1:1 availability error, if the windows don't make any sessions.
+  const oneOnOneProblem = (): string | null => {
+    if (form.sessionType !== 'one_on_one') return null;
+    const { errors, count } = form.sessionIsWeekly
+      ? (() => {
+          const r = generateWeeklySessions(
+            form.sessionWindows,
+            form.durationMinutes,
+            form.breakMinutes,
+          );
+          return { errors: r.errors, count: r.perWeek };
+        })()
+      : (() => {
+          const r = generateSessionSlots(
+            form.sessionWindows,
+            form.durationMinutes,
+            form.breakMinutes,
+          );
+          return { errors: r.errors, count: r.slots.length };
+        })();
+    if (errors.length > 0) return errors[0] ?? null;
+    if (count === 0) return "Your availability windows don't fit a single session";
+    return null;
+  };
+
+  // The host to act for, then the shared rules (same as the host editors).
+  const validateForPublish = (): boolean => {
     if (!selectedHost?.id) {
       setShowErrors(true);
       toast.error('Please select the host to create this experience for');
       return false;
     }
-    if (!form.title.trim()) {
+    const problem = firstProblem(form, {
+      publish: true,
+      sessionProblem: oneOnOneProblem(),
+    });
+    if (problem) {
       setShowErrors(true);
-      toast.error('Please enter an experience title');
-      return false;
-    }
-    if (!form.hookLine.trim()) {
-      setShowErrors(true);
-      toast.error('Please enter a hook line');
-      return false;
-    }
-    if (!form.mood) {
-      setShowErrors(true);
-      toast.error('Please select a mood');
-      return false;
-    }
-    if (!form.description.trim()) {
-      setShowErrors(true);
-      toast.error('Please add a description');
-      return false;
-    }
-    return true;
-  };
-
-  const validateStep2 = (): boolean => {
-    if (form.sessionType === 'one_on_one') {
-      const { errors, count } = form.sessionIsWeekly
-        ? (() => {
-            const r = generateWeeklySessions(
-              form.sessionWindows,
-              form.durationMinutes,
-              form.breakMinutes,
-            );
-            return { errors: r.errors, count: r.perWeek };
-          })()
-        : (() => {
-            const r = generateSessionSlots(
-              form.sessionWindows,
-              form.durationMinutes,
-              form.breakMinutes,
-            );
-            return { errors: r.errors, count: r.slots.length };
-          })();
-      if (errors.length > 0) {
-        setShowErrors(true);
-        toast.error(errors[0]);
-        return false;
-      }
-      if (count === 0) {
-        setShowErrors(true);
-        toast.error("Your availability windows don't fit a single session");
-        return false;
-      }
-    } else if (form.scheduleType === 'custom_dates') {
-      const valid = form.customDatesList.filter((s) => s.date && s.time);
-      if (valid.length === 0) {
-        setShowErrors(true);
-        toast.error('Please add at least one custom date and time slot');
-        return false;
-      }
-    } else {
-      if (!form.eventDate) {
-        setShowErrors(true);
-        toast.error('Please select an event date');
-        return false;
-      }
-      if (!form.eventTime) {
-        setShowErrors(true);
-        toast.error('Please select a start time');
-        return false;
-      }
-    }
-    if (
-      form.monthlyPassEnabled &&
-      form.scheduleType !== 'one_time' &&
-      !form.isFree &&
-      Number(form.monthlyPassPriceStr) <= 0
-    ) {
-      setShowErrors(true);
-      toast.error('Please set a monthly pass price, or switch the pass off');
-      return false;
-    }
-    // A pass is a balance of sessions the guest spends one at a time, so it
-    // must say how many it holds.
-    if (
-      form.monthlyPassEnabled &&
-      form.scheduleType !== 'one_time' &&
-      !form.isFree &&
-      !(Number(form.monthlyPassSessionsStr) >= 1)
-    ) {
-      setShowErrors(true);
-      toast.error('Set how many sessions the monthly pass includes');
-      return false;
-    }
-    if (!form.isFree && !form.useTiers && form.priceCents <= 0) {
-      setShowErrors(true);
-      toast.error('Please set a valid price');
-      return false;
-    }
-    if (
-      !form.isFree &&
-      form.useTiers &&
-      form.priceTiers.filter((t) => t.name.trim() && Number(t.priceStr) > 0)
-        .length === 0
-    ) {
-      setShowErrors(true);
-      toast.error('Add at least one ticket type with a name and price');
-      return false;
-    }
-    if (
-      form.isPrivate &&
-      form.privateAccessMode === 'passkey' &&
-      form.accessMode === 'shared' &&
-      !form.accessPasskey.trim()
-    ) {
-      setShowErrors(true);
-      toast.error('A private experience needs a passkey');
-      return false;
-    }
-    // An RSVP host approves people on the strength of what they submit, so the
-    // request form can't be empty — without required fields every request would
-    // arrive as a bare name and there'd be nothing to judge.
-    if (
-      form.isPrivate &&
-      form.privateAccessMode === 'rsvp' &&
-      (!form.requiresAttendeeDetails || form.attendeeFields.length === 0)
-    ) {
-      setShowErrors(true);
-      toast.error(
-        'Request-to-join needs attendee details — turn them on and pick at least one field',
-      );
+      toast.error(problem);
       return false;
     }
     return true;
@@ -1279,7 +1173,7 @@ export const CreateExperience: React.FC = () => {
         toast.error('Add a title before saving as draft');
         return;
       }
-    } else if (!validateStep1() || !validateStep2()) {
+    } else if (!validateForPublish()) {
       return;
     }
     const hostId = selectedHost?.id;
@@ -1389,7 +1283,7 @@ export const CreateExperience: React.FC = () => {
       const payload = {
         host_id: hostId,
         title: form.title.trim(),
-        hook_line: form.hookLine.trim(),
+        hook_line: hookLineWithFallback(form),
         mood: form.mood,
         description: form.description.trim(),
         cover_image_url: coverImageUrl,
@@ -1408,29 +1302,7 @@ export const CreateExperience: React.FC = () => {
         max_group_size: form.sessionType === 'one_on_one' ? 1 : form.maxGroupSize,
         languages: form.languages,
         level: form.level || undefined,
-        price_cents: form.isFree || form.useTiers ? 0 : form.priceCents,
-        is_free: form.isFree,
-        price_tiers:
-          !form.isFree && form.useTiers
-            ? form.priceTiers
-                .filter((t) => t.name.trim() && Number(t.priceStr) > 0)
-                .map((t) => ({
-                  name: t.name.trim(),
-                  price_cents: Math.round(Number(t.priceStr) * 100),
-                }))
-            : undefined,
-        monthly_pass: {
-          price_cents:
-            form.monthlyPassEnabled && !form.isFree && form.scheduleType !== 'one_time'
-              ? Math.round(Number(form.monthlyPassPriceStr) * 100)
-              : 0,
-          session_limit: form.monthlyPassSessionsStr
-            ? Number(form.monthlyPassSessionsStr)
-            : undefined,
-          capacity: form.monthlyPassCapacityStr
-            ? Number(form.monthlyPassCapacityStr)
-            : undefined,
-        },
+        ...pricingPayload(form),
         schedule_type: isWeeklyOneOnOne ? ('recurring' as const) : form.scheduleType,
         custom_dates: isWeeklyOneOnOne
           ? []
@@ -1456,14 +1328,7 @@ export const CreateExperience: React.FC = () => {
         terms_and_conditions: form.termsAndConditions.trim() || undefined,
         requires_attendee_details: form.requiresAttendeeDetails,
         attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
-        is_private: form.isPrivate,
-        private_access_mode: form.privateAccessMode,
-        // Shared mode sends the one passkey; unique mode clears it (access comes
-        // from the per-guest access codes). A public event clears it server-side.
-        access_passkey:
-          form.isPrivate && form.accessMode === 'shared'
-            ? form.accessPasskey.trim()
-            : '',
+        ...accessPayload(form),
       };
 
       if (isEdit && editEventId) {
@@ -1719,7 +1584,11 @@ export const CreateExperience: React.FC = () => {
                 ) : (
                   <LuGlobe className="h-3.5 w-3.5 text-[#D8B4FE]" />
                 )}
-                {form.isPrivate ? 'Private event' : 'Public event'}
+                {!form.isPrivate
+                  ? 'Anyone can book'
+                  : form.privateAccessMode === 'rsvp'
+                    ? 'People I approve'
+                    : 'People with a code'}
               </button>
               <div className="ml-auto w-full sm:w-auto">
                 <Segmented<'group' | 'one_on_one'>
@@ -1741,6 +1610,8 @@ export const CreateExperience: React.FC = () => {
                 />
               </div>
             </div>
+
+            {isEdit && editEventId && <NeedsAttention eventId={editEventId} />}
 
             {/* What */}
             <section className="space-y-4">
@@ -2018,7 +1889,7 @@ export const CreateExperience: React.FC = () => {
             </Section>
 
             {/* Tickets */}
-            <Section title={isOneOnOne ? 'Price' : 'Tickets'}>
+            <Section title="How do guests pay?">
               {!isOneOnOne && (
                 <Rows>
                   <Row label="Slots">
@@ -2039,17 +1910,13 @@ export const CreateExperience: React.FC = () => {
                   { value: 'free', label: 'Free' },
                 ]}
               />
-              {!form.isFree && !form.useTiers && (
-                <Rows>
-                  <Row label="Price per person (₹)" error={err(form.priceCents <= 0)}>
-                    <NumberInput
-                      value={form.priceCents / 100}
-                      decimal
-                      onChange={(v) => updateForm('priceCents', Math.round(v * 100))}
-                      ariaLabel="Price per person"
-                    />
-                  </Row>
-                </Rows>
+              {!form.isFree && (
+                <GuestPaymentCard
+                  value={form}
+                  onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                  repeating={form.scheduleType !== 'one_time'}
+                  showErrors={showErrors}
+                />
               )}
             </Section>
 
@@ -2057,37 +1924,44 @@ export const CreateExperience: React.FC = () => {
             <Section title="More options" hint="All optional. Open one to change it.">
               <div>
                 <MoreOptions
-                  title="Who can see it"
-                  summary={
-                    form.isPrivate
-                      ? form.privateAccessMode === 'rsvp'
-                        ? 'Private · request to join'
-                        : 'Private · passkey'
-                      : 'Public'
-                  }
+                  title="Who can book?"
+                  summary={whoCanBookLabel(form.isPrivate, form.privateAccessMode)}
                   defaultOpen={form.isPrivate}
                 >
-                  <Segmented<'public' | 'private'>
-                    value={form.isPrivate ? 'private' : 'public'}
-                    onChange={(v) => updateForm('isPrivate', v === 'private')}
+                  {/* Who can book: anyone = public; code = private + passkey gate;
+                      approve = private + rsvp gate. Access only, never price. */}
+                  <Segmented<'anyone' | 'code' | 'approve'>
+                    value={
+                      !form.isPrivate
+                        ? 'anyone'
+                        : form.privateAccessMode === 'rsvp'
+                          ? 'approve'
+                          : 'code'
+                    }
+                    onChange={(v) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        isPrivate: v !== 'anyone',
+                        ...(v !== 'anyone' && {
+                          privateAccessMode: v === 'approve' ? 'rsvp' : 'passkey',
+                        }),
+                      }))
+                    }
                     options={[
-                      { value: 'public', label: 'Public' },
-                      { value: 'private', label: 'Private' },
+                      { value: 'anyone', label: 'Anyone' },
+                      { value: 'code', label: 'People with a code' },
+                      { value: 'approve', label: 'People I approve' },
                     ]}
                   />
+                  <p className="px-1 text-xs leading-5 text-white/45">
+                    {!form.isPrivate
+                      ? 'Anyone on MySlotMate can find and book it.'
+                      : form.privateAccessMode === 'rsvp'
+                        ? 'Listed with a lock. Guests request to join; the host approves each one.'
+                        : 'Listed with a lock. Guests enter a code to book; they still pay the normal price.'}
+                  </p>
                   {form.isPrivate && (
                     <div className="space-y-4">
-                      <p className="px-1 text-xs leading-5 text-white/45">
-                        Still shown in discovery with a lock. Guests need a way in to book.
-                      </p>
-                      <Segmented<'passkey' | 'rsvp'>
-                        value={form.privateAccessMode}
-                        onChange={(v) => updateForm('privateAccessMode', v)}
-                        options={[
-                          { value: 'passkey', label: 'Unlock with a code' },
-                          { value: 'rsvp', label: 'Request to join' },
-                        ]}
-                      />
                       {form.privateAccessMode === 'rsvp' ? (
                         <div className="space-y-1.5 rounded-2xl border border-white/[0.06] bg-[#131328] px-4 py-3.5 text-sm text-white/70">
                           <p>
@@ -2104,14 +1978,14 @@ export const CreateExperience: React.FC = () => {
                             value={form.accessMode}
                             onChange={(v) => updateForm('accessMode', v)}
                             options={[
-                              { value: 'shared', label: 'One passkey' },
+                              { value: 'shared', label: 'One code for everyone' },
                               { value: 'unique', label: 'Code per guest' },
                             ]}
                           />
                           {form.accessMode === 'shared' ? (
                             <Rows>
                               <Row
-                                label="Passkey"
+                                label="Code"
                                 error={err(!form.accessPasskey.trim())}
                               >
                                 <input
@@ -2139,18 +2013,11 @@ export const CreateExperience: React.FC = () => {
                             <p className="px-1 text-sm text-white/60">
                               Each guest gets a single-use code that unlocks booking.{' '}
                               {isEdit
-                                ? 'Generate them below.'
+                                ? 'Make them in Codes below.'
                                 : 'Save the experience first, then generate them here.'}
                             </p>
                           )}
                         </>
-                      )}
-                      {isEdit && editEventId && selectedHost?.id && (
-                        <CouponsManager
-                          eventId={editEventId}
-                          hostId={selectedHost.id}
-                          kind="access"
-                        />
                       )}
                     </div>
                   )}
@@ -2192,124 +2059,23 @@ export const CreateExperience: React.FC = () => {
                   </Rows>
                 </MoreOptions>
 
-                {!form.isFree && (
-                  <MoreOptions
-                    title="Ticket types & monthly pass"
-                    summary={
-                      form.useTiers
-                        ? `${form.priceTiers.length} ticket types`
-                        : form.monthlyPassEnabled
-                          ? 'One price · pass on'
-                          : 'One price'
-                    }
-                  >
-                    <Segmented<'single' | 'tiers'>
-                      value={form.useTiers ? 'tiers' : 'single'}
-                      onChange={(v) => updateForm('useTiers', v === 'tiers')}
-                      options={[
-                        { value: 'single', label: 'Single price' },
-                        { value: 'tiers', label: 'Multiple ticket types' },
-                      ]}
-                    />
-                    {form.useTiers && (
-                      <div className="space-y-2">
-                        {form.priceTiers.map((tier, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={tier.name}
-                              onChange={(e) => updatePriceTier(index, 'name', e.target.value)}
-                              placeholder="Ticket name, e.g. VIP"
-                              className={`${FIELD} !py-2.5`}
-                            />
-                            <input
-                              type="number"
-                              min={0}
-                              value={tier.priceStr}
-                              onChange={(e) =>
-                                updatePriceTier(index, 'priceStr', e.target.value)
-                              }
-                              placeholder="₹ Price"
-                              className={`${FIELD} !w-32 !py-2.5`}
-                            />
-                            {form.priceTiers.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removePriceTier(index)}
-                                className="p-1.5 text-white/40 transition hover:text-red-400"
-                                aria-label="Remove ticket type"
-                              >
-                                <FiX className="h-5 w-5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <AddPill onClick={addPriceTier}>Add another ticket type</AddPill>
-                      </div>
-                    )}
-                    <ToggleRow
-                      label="Monthly pass"
-                      hint={
-                        form.scheduleType === 'one_time'
-                          ? 'Repeating or several-dates events only.'
-                          : 'Guests pay once and attend for 30 days.'
-                      }
-                      checked={form.monthlyPassEnabled}
-                      disabled={form.scheduleType === 'one_time'}
-                      onChange={(next) => updateForm('monthlyPassEnabled', next)}
-                    />
-                    {form.monthlyPassEnabled && form.scheduleType !== 'one_time' && (
-                      <Rows>
-                        <Row
-                          label="Pass price (₹)"
-                          error={err(Number(form.monthlyPassPriceStr) <= 0)}
-                        >
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.monthlyPassPriceStr}
-                            onChange={(e) => updateForm('monthlyPassPriceStr', e.target.value)}
-                            placeholder="2500"
-                            className={ROW_INPUT}
-                          />
-                        </Row>
-                        <Row label="Sessions included">
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.monthlyPassSessionsStr}
-                            onChange={(e) =>
-                              updateForm('monthlyPassSessionsStr', e.target.value)
-                            }
-                            placeholder="e.g. 8"
-                            className={ROW_INPUT}
-                          />
-                        </Row>
-                        <Row label="Passes available">
-                          <input
-                            type="number"
-                            min={1}
-                            value={form.monthlyPassCapacityStr}
-                            onChange={(e) =>
-                              updateForm('monthlyPassCapacityStr', e.target.value)
-                            }
-                            placeholder="Unlimited"
-                            className={ROW_INPUT}
-                          />
-                        </Row>
-                      </Rows>
-                    )}
-                  </MoreOptions>
-                )}
+                
 
-                {isEdit && editEventId && selectedHost?.id && !form.isFree && (
-                  <MoreOptions title="Coupons & free codes" summary="Discounts and comps">
-                    <CouponsManager
+                {isEdit && editEventId && selectedHost?.id && (
+                  <MoreOptions title="Codes" summary="Unlock, % off or free">
+                    <CodesPanel
                       eventId={editEventId}
                       hostId={selectedHost.id}
-                      kind="discount"
+                      isFree={form.isFree}
+                      codeGated={form.isPrivate && form.privateAccessMode === 'passkey'}
+                      sharedPasskey={
+                        form.isPrivate &&
+                        form.privateAccessMode === 'passkey' &&
+                        form.accessMode === 'shared'
+                          ? form.accessPasskey
+                          : ''
+                      }
                     />
-                    <CouponsManager eventId={editEventId} hostId={selectedHost.id} kind="free" />
                   </MoreOptions>
                 )}
 

@@ -1,0 +1,120 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { fetchBoosts, type Boost } from '../../api/boosts';
+import { dateTimeIST, pct, rupees, statusBadge, tabOf, TABS, type Tab } from './format';
+
+// Event Boost queue: requests from hosts, open proposals, accepted ones
+// waiting to go live, live campaigns and finished ones.
+
+export const BoostsQueue: React.FC = () => {
+  const navigate = useNavigate();
+  const [items, setItems] = useState<Boost[] | null>(null);
+  const [tab, setTab] = useState<Tab>('new');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchBoosts()
+      .then((r) => setItems(r.items))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load Boosts.'));
+  }, []);
+
+  const counts = useMemo(() => {
+    const c: Record<Tab, number> = { new: 0, proposed: 0, accepted: 0, live: 0, ended: 0, closed: 0 };
+    (items ?? []).forEach((b) => c[tabOf(b)]++);
+    return c;
+  }, [items]);
+  const shown = (items ?? []).filter((b) => tabOf(b) === tab);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">
+          Event Boost
+        </p>
+        <p className="mt-2 max-w-3xl text-sm text-mist">
+          Hosts ask to promote one event. Send a proposal per ticket type (the host guide&apos;s rate, or 12–20% for
+          tickets of ₹1,000+ with a reason); once the host accepts, go live when the ads start. Commission applies only
+          to tickets sold while live. Invite pilot hosts from their profile.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-1 border-b border-slate-200" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            title={t.hint}
+            onClick={() => setTab(t.key)}
+            className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-bold transition ${
+              tab === t.key ? 'border-brand-600 text-ink' : 'border-transparent text-mist hover:text-ink'
+            }`}
+          >
+            {t.label}
+            {counts[t.key] > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                  t.key === 'new' || t.key === 'accepted' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {counts[t.key]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {error && <p className="text-sm font-semibold text-rose-600">{error}</p>}
+
+      <Card className="overflow-x-auto p-0">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-500">
+              <th className="px-5 py-3">Event</th>
+              <th className="px-3 py-3">Host</th>
+              <th className="px-3 py-3">Rates</th>
+              <th className="px-3 py-3">Requested</th>
+              <th className="px-3 py-3 text-right">Sold · commission</th>
+              <th className="px-5 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((b) => {
+              const s = statusBadge(b);
+              return (
+                <tr
+                  key={b.id}
+                  onClick={() => navigate(`/boosts/${b.id}`)}
+                  className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
+                >
+                  <td className="px-5 py-3">
+                    <span className="block font-semibold text-ink">{b.event_title}</span>
+                    <span className="block text-xs text-mist">{b.channels.join(', ')}</span>
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">{b.host_name}</td>
+                  <td className="px-3 py-3 text-slate-600">
+                    {b.rates.map((r) => `${r.ticket_name} ${pct(r.rate_bps)}`).join(' · ')}
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap text-slate-600">{dateTimeIST(b.requested_at)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-slate-600">
+                    {b.tickets_sold > 0 ? `${b.tickets_sold} · ${rupees(b.commission_cents)}` : '—'}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <Badge color={s.color} withDot>
+                      {s.label}
+                    </Badge>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {items && shown.length === 0 && <p className="py-10 text-center text-sm text-mist">Nothing here.</p>}
+        {!items && !error && <p className="py-10 text-center text-sm text-mist">Loading…</p>}
+      </Card>
+    </div>
+  );
+};

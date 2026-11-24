@@ -167,7 +167,7 @@ export interface EventDetail {
   session_windows?: ApiSessionWindow[] | null;
   private_access_mode?: PrivateAccessMode;
   cancellation_policy: string | null;
-  price_tiers: { id: string; name: string; price_cents: number }[] | null;
+  price_tiers: { id: string; name: string; price_cents: number; capacity?: number | null }[] | null;
   monthly_pass_price_cents?: number | null;
   monthly_pass_session_limit?: number | null;
   monthly_pass_capacity?: number | null;
@@ -320,4 +320,20 @@ export interface ExperienceTemplate {
 export function listExperienceTemplates(mood?: string): Promise<ExperienceTemplate[]> {
   const qs = mood ? `?mood=${encodeURIComponent(mood)}` : '';
   return apiFetch<ExperienceTemplate[]>(`/experience-templates${qs}`);
+}
+
+/** One thing about an experience that needs the host's eye. */
+export interface AttentionItem {
+  kind: 'join_requests' | 'code_used_up' | 'code_near_limit' | 'code_expiring' | 'passes_expiring';
+  title: string;
+  count?: number;
+  code?: string;
+  due?: string;
+}
+
+// GET /events/{id}/attention — the "Needs attention" list the host dashboard
+// also shows: join requests waiting, codes running out, passes ending soon.
+export async function fetchEventAttention(eventId: string): Promise<AttentionItem[]> {
+  const res = await apiFetch<AttentionItem[] | null>(`/events/${eventId}/attention`);
+  return res ?? [];
 }

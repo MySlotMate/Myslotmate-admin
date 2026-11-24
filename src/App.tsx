@@ -24,6 +24,9 @@ import { BlogsDirectory } from './modules/blogs/BlogsDirectory';
 import { LandingPagesDirectory } from './modules/landing-pages/LandingPagesDirectory';
 import { MarketingDirectory } from './modules/marketing/MarketingDirectory';
 import { NotificationsComposer } from './modules/notifications/NotificationsComposer';
+import { BillingPage } from './modules/billing/BillingPage';
+import { BoostsQueue } from './modules/boosts/BoostsQueue';
+import { BoostReview } from './modules/boosts/BoostReview';
 import { SettingsManager } from './modules/settings/SettingsManager';
 
 interface RouteProps {
@@ -113,6 +116,9 @@ const AppContent: React.FC = () => {
                 <Route path="/bookings" element={<BookingsDirectory searchQuery={globalSearch} />} />
                 <Route path="/join-requests" element={<JoinRequestsDirectory />} />
                 <Route path="/payments" element={<PaymentsDirectory />} />
+                <Route path="/billing" element={<BillingPage />} />
+                <Route path="/boosts" element={<BoostsQueue />} />
+                <Route path="/boosts/:id" element={<BoostReview />} />
                 <Route path="/cities" element={<CitiesDirectory />} />
                 <Route path="/reviews" element={<ReviewsDirectory />} />
                 <Route path="/reports" element={<ReportsDirectory />} />
