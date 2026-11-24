@@ -157,7 +157,9 @@ export const LandingPagesDirectory: React.FC = () => {
   const [form, setForm] = useState<LandingPageUpdatePayload | null>(null);
   // Which text on the page canvas is being edited (double-click to start).
   const [activeField, setActiveField] = useState<'title' | 'hook' | 'content' | 'cta' | null>(null);
-  const [pendingCoverCrop, setPendingCoverCrop] = useState<File | null>(null);
+  // Images waiting for the crop step: 4:5, as the website's event form crops them.
+  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  const [cropTarget, setCropTarget] = useState<'cover' | 'gallery'>('cover');
   const inlineInputRef = useRef<HTMLInputElement | null>(null);
   const inlineResolverRef = useRef<((url: string | null) => void) | null>(null);
 
@@ -303,10 +305,16 @@ export const LandingPagesDirectory: React.FC = () => {
       if (publish !== undefined && publish !== !!saved.published_at) {
         saved = await setLandingPagePublished(saved.id, publish);
       }
+      await load();
+      if (publish) {
+        // Save & publish finishes the page: back to the list.
+        closeEditor();
+        alert(`Published at ${SITE_URL}/${saved.slug}`);
+        return;
+      }
       setEditing(saved);
       setForm(toForm(saved));
-      await load();
-      alert(publish ? `Published at ${SITE_URL}/${saved.slug}` : 'Saved.');
+      alert('Saved.');
     } catch (err) {
       alert(errMsg(err, 'Could not save landing page.'));
     } finally {
@@ -353,40 +361,38 @@ export const LandingPagesDirectory: React.FC = () => {
     if (!file) return;
     const problem = checkImage(file);
     if (problem) return alert(problem);
-    setPendingCoverCrop(file);
+    setCropTarget('cover');
+    setCropQueue([file]);
   };
 
-  const handleCoverCropConfirm = async (blob: Blob, originalName: string) => {
+  // Poster and gallery photos are cropped one by one, like the website's
+  // event form, then uploaded.
+  const handleCropConfirm = async (blob: Blob, originalName: string) => {
     const ext = blob.type === 'image/png' ? 'png' : 'jpg';
-    const file = new File([blob], `${originalName.replace(/\.[^.]+$/, '') || 'cover'}-cropped.${ext}`, {
+    const file = new File([blob], `${originalName.replace(/\.[^.]+$/, '') || 'image'}-cropped.${ext}`, {
       type: blob.type,
     });
     try {
       setLoading(true);
       const url = await uploadLandingImage(file);
-      if (url) set('cover_image_url', url);
+      if (url && cropTarget === 'cover') set('cover_image_url', url);
+      else if (url) setForm((f) => (f ? { ...f, gallery_urls: [...f.gallery_urls, url] } : f));
     } catch (err) {
-      alert(errMsg(err, 'Cover upload failed.'));
+      alert(errMsg(err, 'Image upload failed.'));
     } finally {
       setLoading(false);
-      setPendingCoverCrop(null);
+      setCropQueue((q) => q.slice(1));
     }
   };
 
-  const handleGalleryPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGalleryPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
     const bad = files.map(checkImage).find(Boolean);
     if (bad) return alert(bad);
-    try {
-      setLoading(true);
-      const urls = (await Promise.all(files.map(uploadLandingImage))).filter(Boolean);
-      setForm((f) => (f ? { ...f, gallery_urls: [...f.gallery_urls, ...urls] } : f));
-    } catch (err) {
-      alert(errMsg(err, 'Gallery upload failed.'));
-    } finally {
-      setLoading(false);
-    }
+    if (files.length === 0) return;
+    setCropTarget('gallery');
+    setCropQueue(files);
   };
 
   const requestInlineImage = (): Promise<string | null> =>
@@ -460,7 +466,7 @@ export const LandingPagesDirectory: React.FC = () => {
       <p className={`${pill} border border-white/10 bg-[#1B1D33]/95 text-white/60 backdrop-blur-xl`}>{lp.status}</p>
     ) : (
       <div className={`${pill} bg-[#fff] px-6 text-[#080914]`}>
-        {editableText('cta', 'cta_text', 'Book tickets', 'w-auto min-w-[8rem] text-right', true)}
+        {editableText('cta', 'cta_text', 'Book slots', 'w-auto min-w-[8rem] text-right', true)}
         <span>{lp?.event.is_free ? '· Free' : `from ${lp?.price ?? '₹…'}`}</span>
       </div>
     ));
@@ -989,10 +995,10 @@ export const LandingPagesDirectory: React.FC = () => {
 
       <input ref={inlineInputRef} type="file" accept="image/*" className="hidden" onChange={handleInlinePicked} />
       <ImageCropModal
-        file={pendingCoverCrop}
-        aspect={16 / 9}
-        onClose={() => setPendingCoverCrop(null)}
-        onConfirm={handleCoverCropConfirm}
+        file={cropQueue[0] ?? null}
+        aspect={4 / 5}
+        onClose={() => setCropQueue([])}
+        onConfirm={handleCropConfirm}
       />
     </div>
   );
