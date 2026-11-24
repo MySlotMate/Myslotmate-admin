@@ -7,8 +7,8 @@
 // additions sit in the same visual language: the host picker under "Hosted by",
 // the URL slug, languages & level, terms on the ticket, and coupons.
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   FiArrowLeft,
   FiCheck,
@@ -22,23 +22,23 @@ import {
   FiUpload,
   FiVideo,
   FiX,
-} from 'react-icons/fi';
-import { LuGlobe, LuLock } from 'react-icons/lu';
-import { RichTextEditor } from '../../components/RichTextEditor';
-import SessionWindowsEditor from '../../components/SessionWindowsEditor';
+} from "react-icons/fi";
+import { LuGlobe, LuLock } from "react-icons/lu";
+import { RichTextEditor } from "../../components/RichTextEditor";
+import SessionWindowsEditor from "../../components/SessionWindowsEditor";
 import {
   generateSessionSlots,
   generateWeeklySessions,
   nextWeeklySession,
   slotsToCustomDates,
   type SessionWindow,
-} from '../../lib/sessionSlots';
-import { ImageCropModal } from '../../components/ImageCropModal';
-import { LocationSearchInput } from '../../components/LocationSearchInput';
-import { toast } from '../../lib/toast';
-import { apiBaseUrl } from '../../api/client';
-import { useDragDrop } from '../../hooks/useDragDrop';
-import { istInputToUTCISO, utcToISTInputs } from '../../lib/datetime';
+} from "../../lib/sessionSlots";
+import { ImageCropModal } from "../../components/ImageCropModal";
+import { LocationSearchInput } from "../../components/LocationSearchInput";
+import { toast } from "../../lib/toast";
+import { apiBaseUrl } from "../../api/client";
+import { useDragDrop } from "../../hooks/useDragDrop";
+import { istInputToUTCISO, utcToISTInputs } from "../../lib/datetime";
 import {
   createEvent,
   updateEvent,
@@ -49,22 +49,22 @@ import {
   uploadFiles,
   listExperienceTemplates,
   checkEventSlugAvailability,
-} from '../../api/events';
-import type { ExperienceTemplate } from '../../api/events';
-import { ATTENDEE_FIELDS } from '../../lib/attendeeFields';
-import CodesPanel from './CodesPanel';
-import GuestPaymentCard from './GuestPaymentCard';
-import NeedsAttention from './NeedsAttention';
+} from "../../api/events";
+import type { ExperienceTemplate } from "../../api/events";
+import { ATTENDEE_FIELDS } from "../../lib/attendeeFields";
+import CodesPanel from "./CodesPanel";
+import GuestPaymentCard from "./GuestPaymentCard";
+import NeedsAttention from "./NeedsAttention";
 import {
   accessPayload,
   firstProblem,
   hookLineWithFallback,
   pricingPayload,
   whoCanBookLabel,
-} from '../../lib/experienceForm';
-import { GuestList } from './GuestList';
-import { fetchHosts, fetchHostDetail } from '../../api/directory';
-import type { Host } from '../../types';
+} from "../../lib/experienceForm";
+import { GuestList } from "./GuestList";
+import { fetchHosts, fetchHostDetail } from "../../api/directory";
+import type { Host } from "../../types";
 import {
   Chip,
   CoverPoster,
@@ -80,8 +80,8 @@ import {
   Section,
   Segmented,
   ToggleRow,
-} from '../../components/event-form/EventFormKit';
-import { DatePill, TimePill } from '../../components/event-form/DateTimePills';
+} from "../../components/event-form/EventFormKit";
+import { DatePill, TimePill } from "../../components/event-form/DateTimePills";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -124,12 +124,12 @@ interface FormData {
   endTime: string;
   isRecurring: boolean;
   recurrenceRule: string;
-  scheduleType: 'one_time' | 'recurring' | 'custom_dates';
+  scheduleType: "one_time" | "recurring" | "custom_dates";
   customDatesList: { date: string; time: string }[];
   // One-on-one: availability windows expanded into single-seat sessions.
   // Weekly windows repeat and are generated server-side; dated ones are
   // expanded here into custom_dates.
-  sessionType: 'group' | 'one_on_one';
+  sessionType: "group" | "one_on_one";
   sessionWindows: SessionWindow[];
   breakMinutes: number;
   sessionIsWeekly: boolean;
@@ -138,8 +138,8 @@ interface FormData {
   requiresAttendeeDetails: boolean;
   attendeeFields: string[];
   isPrivate: boolean;
-  privateAccessMode: 'passkey' | 'rsvp';
-  accessMode: 'shared' | 'unique';
+  privateAccessMode: "passkey" | "rsvp";
+  accessMode: "shared" | "unique";
   accessPasskey: string;
   passkeyGrantsFree: boolean;
 }
@@ -148,22 +148,38 @@ const DURATION_OPTIONS = [30, 60, 90, 120, 180, 240];
 
 // Preset languages an experience can be conducted in. A custom one can also be
 // added via the "Other" input. Selection is multi-select.
-const LANGUAGE_OPTIONS = ['English', 'Hindi', 'Bengali', 'Assamese'];
+const LANGUAGE_OPTIONS = ["English", "Hindi", "Bengali", "Assamese"];
 
-const LEVEL_OPTIONS = ['Beginner Friendly', 'Intermediate', 'Advanced'];
+const LEVEL_OPTIONS = ["Beginner Friendly", "Intermediate", "Advanced"];
 
 const CANCELLATION_POLICIES = [
-  { value: 'flexible', label: 'Flexible', description: 'Full refund up to 24 hours before' },
-  { value: 'moderate', label: 'Moderate', description: 'Full refund up to 5 days before' },
-  { value: 'strict', label: 'Strict', description: '50% refund up to 1 week before' },
-  { value: 'no_refund', label: 'No Refund', description: 'Non-refundable once booked' },
+  {
+    value: "flexible",
+    label: "Flexible",
+    description: "Full refund up to 24 hours before",
+  },
+  {
+    value: "moderate",
+    label: "Moderate",
+    description: "Full refund up to 5 days before",
+  },
+  {
+    value: "strict",
+    label: "Strict",
+    description: "50% refund up to 1 week before",
+  },
+  {
+    value: "no_refund",
+    label: "No Refund",
+    description: "Non-refundable once booked",
+  },
 ];
 
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // Public customer site — used for share/view links.
-const SITE_URL = 'https://myslotmate.com';
+const SITE_URL = "https://myslotmate.com";
 // The backend's image proxy (GET /image-proxy, https S3 URLs only) — used to
 // load hosted images back into the cropper, since S3 won't serve them to the
 // admin origin.
@@ -172,8 +188,7 @@ const SITE_PROXY = `${apiBaseUrl}/image-proxy`;
 // Same 4:5 frame as the poster on the website and the host dashboard.
 const POSTER_ASPECT = 4 / 5;
 
-const minsLabel = (mins: number) =>
-  mins >= 60 ? `${mins / 60}h` : `${mins}m`;
+const minsLabel = (mins: number) => (mins >= 60 ? `${mins / 60}h` : `${mins}m`);
 
 /* ------------------------------------------------------------------ */
 /*  Number field that can be cleared while typing                      */
@@ -202,7 +217,7 @@ function NumberInput({
   return (
     <input
       type="number"
-      inputMode={decimal ? 'decimal' : 'numeric'}
+      inputMode={decimal ? "decimal" : "numeric"}
       min={min}
       value={draft ?? String(value)}
       placeholder={placeholder}
@@ -237,7 +252,7 @@ function HostPicker({
   onSelect: (host: Host | null) => void;
   hasError?: boolean;
 }) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<Host[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -250,10 +265,14 @@ function HostPicker({
       void (async () => {
         setLoading(true);
         try {
-          const res = await fetchHosts({ page: 1, pageSize: 20, search: q || undefined });
+          const res = await fetchHosts({
+            page: 1,
+            pageSize: 20,
+            search: q || undefined,
+          });
           setResults(res.items);
         } catch (err) {
-          console.error('Host search failed:', err);
+          console.error("Host search failed:", err);
         } finally {
           setLoading(false);
         }
@@ -270,12 +289,15 @@ function HostPicker({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   if (selectedHost) {
@@ -291,13 +313,17 @@ function HostPicker({
           <div
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white ${GRADIENT}`}
           >
-            {(selectedHost.name?.[0] ?? 'H').toUpperCase()}
+            {(selectedHost.name?.[0] ?? "H").toUpperCase()}
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">{selectedHost.name}</p>
+          <p className="truncate text-sm font-semibold text-white">
+            {selectedHost.name}
+          </p>
           {selectedHost.city && (
-            <p className="truncate text-xs text-white/40">{selectedHost.city}</p>
+            <p className="truncate text-xs text-white/40">
+              {selectedHost.city}
+            </p>
           )}
         </div>
         {!locked && (
@@ -305,7 +331,7 @@ function HostPicker({
             type="button"
             onClick={() => {
               onSelect(null);
-              setQuery('');
+              setQuery("");
               setResults([]);
             }}
             className="rounded-full px-3 py-1.5 text-[13px] font-medium text-white/50 transition hover:bg-white/[0.06] hover:text-white"
@@ -321,7 +347,7 @@ function HostPicker({
     <div ref={containerRef} className="relative">
       <div
         className={`flex items-center gap-2 rounded-2xl border bg-[#121426] px-4 transition focus-within:border-[#B57BFF] ${
-          hasError ? 'border-red-500' : 'border-white/10'
+          hasError ? "border-red-500" : "border-white/10"
         }`}
       >
         <FiSearch className="shrink-0 text-white/40" size={16} />
@@ -344,7 +370,9 @@ function HostPicker({
       </div>
       {isOpen && (
         <div className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#14152a] p-1 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]">
-          {loading && <p className="px-3 py-3 text-sm text-white/50">Searching hosts…</p>}
+          {loading && (
+            <p className="px-3 py-3 text-sm text-white/50">Searching hosts…</p>
+          )}
           {!loading && results.length === 0 && (
             <p className="px-3 py-3 text-sm text-white/50">No hosts found.</p>
           )}
@@ -364,8 +392,12 @@ function HostPicker({
                   {host.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-white">{host.name}</span>
-                  <span className="block truncate text-xs text-white/45">{host.city}</span>
+                  <span className="block truncate text-sm font-semibold text-white">
+                    {host.name}
+                  </span>
+                  <span className="block truncate text-xs text-white/45">
+                    {host.city}
+                  </span>
                 </span>
               </button>
             ))}
@@ -402,7 +434,7 @@ function GalleryUpload({
       const tooBig = files.filter((f) => f.size > MAX_FILE_SIZE_BYTES);
       if (tooBig.length > 0) {
         toast.error(
-          `Too large: ${tooBig.map((f) => f.name).join(', ')}. Max size is ${MAX_FILE_SIZE_MB}MB per file.`,
+          `Too large: ${tooBig.map((f) => f.name).join(", ")}. Max size is ${MAX_FILE_SIZE_MB}MB per file.`,
         );
       }
       if (ok.length > 0) onUpload(ok);
@@ -410,11 +442,16 @@ function GalleryUpload({
     [onUpload],
   );
 
-  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
-    useDragDrop({ onDrop: processFiles, accept: 'image/*' });
+  const {
+    isDragging,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+  } = useDragDrop({ onDrop: processFiles, accept: "image/*" });
 
   const tileAction =
-    'flex items-center justify-center gap-1 rounded-full bg-black/60 px-2.5 py-1.5 text-[12px] font-semibold text-white backdrop-blur-md transition hover:bg-black/80 disabled:opacity-50';
+    "flex items-center justify-center gap-1 rounded-full bg-black/60 px-2.5 py-1.5 text-[12px] font-semibold text-white backdrop-blur-md transition hover:bg-black/80 disabled:opacity-50";
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -432,7 +469,11 @@ function GalleryUpload({
             aria-hidden="true"
             className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl"
           />
-          <img src={p} alt={`Photo ${i + 1}`} className="relative block h-full w-full object-contain" />
+          <img
+            src={p}
+            alt={`Photo ${i + 1}`}
+            className="relative block h-full w-full object-contain"
+          />
           <span className="absolute top-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
             {i + 1}
           </span>
@@ -445,7 +486,7 @@ function GalleryUpload({
               className={`${tileAction} flex-1`}
             >
               <FiCrop size={12} />
-              {recropping === i ? 'Loading…' : 'Re-crop'}
+              {recropping === i ? "Loading…" : "Re-crop"}
             </button>
             <button
               type="button"
@@ -471,17 +512,22 @@ function GalleryUpload({
         tabIndex={0}
         aria-label="Add photos"
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
+          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
         }}
         className={`flex aspect-[4/5] cursor-pointer flex-col items-center justify-center rounded-[18px] border-2 border-dashed p-4 text-center transition ${
           isDragging
-            ? 'border-[#A020F0] bg-[#A020F0]/10'
-            : 'border-white/15 hover:border-[#A020F0] hover:bg-white/[0.04]'
+            ? "border-[#A020F0] bg-[#A020F0]/10"
+            : "border-white/15 hover:border-[#A020F0] hover:bg-white/[0.04]"
         }`}
       >
-        <FiUpload className={`mb-2 ${isDragging ? 'text-[#D8B4FE]' : 'text-white/50'}`} size={22} />
-        <p className={`text-sm font-medium ${isDragging ? 'text-[#D8B4FE]' : 'text-white/75'}`}>
-          {isDragging ? 'Drop photos here' : 'Add photos'}
+        <FiUpload
+          className={`mb-2 ${isDragging ? "text-[#D8B4FE]" : "text-white/50"}`}
+          size={22}
+        />
+        <p
+          className={`text-sm font-medium ${isDragging ? "text-[#D8B4FE]" : "text-white/75"}`}
+        >
+          {isDragging ? "Drop photos here" : "Add photos"}
         </p>
         <p className="mt-1 text-[11px] text-white/35">PNG or JPG up to 5MB</p>
       </div>
@@ -492,7 +538,7 @@ function GalleryUpload({
         multiple
         onChange={(e) => {
           processFiles(Array.from(e.target.files ?? []));
-          e.target.value = '';
+          e.target.value = "";
         }}
         className="hidden"
       />
@@ -527,7 +573,7 @@ function TitleField({
       .then((data) => {
         if (!cancelled) setTemplates(data ?? []);
       })
-      .catch((err) => console.error('Template fetch failed:', err));
+      .catch((err) => console.error("Template fetch failed:", err));
     return () => {
       cancelled = true;
     };
@@ -535,7 +581,7 @@ function TitleField({
 
   const q = value.trim().toLowerCase();
   const filtered = (mood ? templates : []).filter(
-    (t) => q === '' || t.title.toLowerCase().includes(q),
+    (t) => q === "" || t.title.toLowerCase().includes(q),
   );
 
   return (
@@ -559,9 +605,9 @@ function TitleField({
         aria-label="Event name"
         maxLength={100}
         className={`font-outfit w-full rounded-2xl border bg-transparent px-2 py-2 text-[28px] leading-tight font-bold text-white transition outline-none placeholder:text-white/30 hover:bg-white/[0.03] focus:border-white/10 focus:bg-white/[0.05] md:text-[32px] ${
-          hasError ? 'border-red-500/70' : 'border-transparent'
+          hasError ? "border-red-500/70" : "border-transparent"
         }`}
-        style={{ backgroundColor: 'transparent' }}
+        style={{ backgroundColor: "transparent" }}
       />
       {showDropdown && filtered.length > 0 && (
         <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#14152a] p-1 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.8)]">
@@ -579,8 +625,12 @@ function TitleField({
               }}
               className="block w-full rounded-xl px-3 py-2.5 text-left transition hover:bg-white/[0.06]"
             >
-              <span className="block text-sm font-semibold text-white">{t.title}</span>
-              <span className="mt-0.5 block text-xs text-white/50">{t.hook_line}</span>
+              <span className="block text-sm font-semibold text-white">
+                {t.title}
+              </span>
+              <span className="mt-0.5 block text-xs text-white/50">
+                {t.hook_line}
+              </span>
             </button>
           ))}
         </div>
@@ -614,13 +664,19 @@ function SuccessModal({
       <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#121426] p-8 text-center shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]">
         <div
           className={`mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full ${
-            isDraft ? 'bg-white/10' : `${GRADIENT} shadow-[0_0_30px_rgba(183,36,234,0.45)]`
+            isDraft
+              ? "bg-white/10"
+              : `${GRADIENT} shadow-[0_0_30px_rgba(183,36,234,0.45)]`
           }`}
         >
           <FiCheck className="text-white" size={30} />
         </div>
         <h2 className="font-outfit mb-2 text-2xl font-bold text-white">
-          {isDraft ? 'Draft saved' : isEdit ? 'Changes saved' : 'Experience is live'}
+          {isDraft
+            ? "Draft saved"
+            : isEdit
+              ? "Changes saved"
+              : "Experience is live"}
         </h2>
         <p className="mb-6 text-sm leading-6 text-white/55">
           {isDraft
@@ -633,14 +689,14 @@ function SuccessModal({
               <button
                 onClick={() => {
                   void navigator.clipboard.writeText(url);
-                  toast.success('Link copied');
+                  toast.success("Link copied");
                 }}
                 className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <FiShare2 size={16} /> Copy link
               </button>
               <button
-                onClick={() => window.open(url, '_blank', 'noopener')}
+                onClick={() => window.open(url, "_blank", "noopener")}
                 className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 <FiExternalLink size={16} /> View live
@@ -648,7 +704,7 @@ function SuccessModal({
             </div>
           )}
           <button
-            onClick={() => navigate('/experiences')}
+            onClick={() => navigate("/experiences")}
             className={`w-full rounded-full py-3 text-sm font-semibold text-white transition hover:opacity-90 ${GRADIENT}`}
           >
             Back to experiences
@@ -668,16 +724,18 @@ export const CreateExperience: React.FC = () => {
   const isEdit = !!editEventId;
   const [loadingEvent, setLoadingEvent] = useState(isEdit);
   // Edit mode: the event's stored status (draft / live / paused …).
-  const [eventStatus, setEventStatus] = useState<string>('');
+  const [eventStatus, setEventStatus] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitType, setSubmitType] = useState<'draft' | 'publish' | null>(null);
+  const [submitType, setSubmitType] = useState<"draft" | "publish" | null>(
+    null,
+  );
   const [showSuccess, setShowSuccess] = useState(false);
   const [savedAsDraft, setSavedAsDraft] = useState(false);
-  const [createdEventId, setCreatedEventId] = useState<string>('');
+  const [createdEventId, setCreatedEventId] = useState<string>("");
   // Live duplicate check for the editable slug (edit mode only).
   const [slugStatus, setSlugStatus] = useState<
-    'idle' | 'checking' | 'available' | 'taken' | 'invalid'
-  >('idle');
+    "idle" | "checking" | "available" | "taken" | "invalid"
+  >("idle");
 
   const [showErrors, setShowErrors] = useState(false);
 
@@ -688,14 +746,14 @@ export const CreateExperience: React.FC = () => {
 
   // Image Crop states
   const [cropQueue, setCropQueue] = useState<File[]>([]);
-  const [cropTarget, setCropTarget] = useState<'profile' | 'cover'>('profile');
+  const [cropTarget, setCropTarget] = useState<"profile" | "cover">("profile");
 
   const [form, setForm] = useState<FormData>({
-    title: '',
-    slug: '',
-    hookLine: '',
-    mood: '',
-    description: '',
+    title: "",
+    slug: "",
+    hookLine: "",
+    mood: "",
+    description: "",
     coverImage: null,
     coverImagePreview: null,
     galleryImages: [],
@@ -703,48 +761,48 @@ export const CreateExperience: React.FC = () => {
     existingCoverUrl: null,
     existingGalleryUrls: [],
     isOnline: false,
-    location: '',
-    meetingLink: '',
-    googleMapsUrl: '',
+    location: "",
+    meetingLink: "",
+    googleMapsUrl: "",
     durationMinutes: 60,
     minGroupSize: 1,
     maxGroupSize: 10,
-    languages: ['English'],
-    level: 'Beginner Friendly',
+    languages: ["English"],
+    level: "Beginner Friendly",
     isFree: false,
     priceCents: 50000,
     useTiers: false,
-    priceTiers: [{ name: '', priceStr: '' }],
+    priceTiers: [{ name: "", priceStr: "" }],
     monthlyPassEnabled: false,
-    monthlyPassPriceStr: '',
-    monthlyPassSessionsStr: '',
-    monthlyPassCapacityStr: '',
-    eventDate: '',
-    eventTime: '',
-    endTime: '',
+    monthlyPassPriceStr: "",
+    monthlyPassSessionsStr: "",
+    monthlyPassCapacityStr: "",
+    eventDate: "",
+    eventTime: "",
+    endTime: "",
     isRecurring: false,
-    recurrenceRule: '',
-    scheduleType: 'one_time',
-    customDatesList: [{ date: '', time: '' }],
-    sessionType: 'group',
-    sessionWindows: [{ date: '', start: '', end: '' }],
+    recurrenceRule: "",
+    scheduleType: "one_time",
+    customDatesList: [{ date: "", time: "" }],
+    sessionType: "group",
+    sessionWindows: [{ date: "", start: "", end: "" }],
     breakMinutes: 0,
     sessionIsWeekly: true,
-    cancellationPolicy: 'flexible',
-    termsAndConditions: '',
+    cancellationPolicy: "flexible",
+    termsAndConditions: "",
     requiresAttendeeDetails: false,
     attendeeFields: [],
     isPrivate: false,
-    privateAccessMode: 'passkey',
-    accessMode: 'shared',
-    accessPasskey: '',
+    privateAccessMode: "passkey",
+    accessMode: "shared",
+    accessPasskey: "",
     passkeyGrantsFree: false,
   });
 
   const addCustomSlot = () => {
     setForm((prev) => ({
       ...prev,
-      customDatesList: [...prev.customDatesList, { date: '', time: '' }],
+      customDatesList: [...prev.customDatesList, { date: "", time: "" }],
     }));
   };
 
@@ -755,10 +813,14 @@ export const CreateExperience: React.FC = () => {
     }));
   };
 
-  const updateCustomSlot = (index: number, field: 'date' | 'time', val: string) => {
+  const updateCustomSlot = (
+    index: number,
+    field: "date" | "time",
+    val: string,
+  ) => {
     setForm((prev) => {
       const list = [...prev.customDatesList];
-      const current = list[index] ?? { date: '', time: '' };
+      const current = list[index] ?? { date: "", time: "" };
       list[index] = { ...current, [field]: val };
       return { ...prev, customDatesList: list };
     });
@@ -781,12 +843,12 @@ export const CreateExperience: React.FC = () => {
         if (cancelled) return;
         // The passkey is stripped unless the owning host_id is supplied, so for a
         // private event refetch with the owner id to prefill it for re-sharing.
-        let accessPasskey = ev.access_passkey ?? '';
+        let accessPasskey = ev.access_passkey ?? "";
         if (ev.is_private && !ev.access_passkey && ev.host_id) {
           try {
             const withKey = await fetchEventDetail(editEventId, ev.host_id);
             if (cancelled) return;
-            accessPasskey = withKey.access_passkey ?? '';
+            accessPasskey = withKey.access_passkey ?? "";
           } catch {
             // Non-fatal: leave blank; host can set a new passkey.
           }
@@ -796,37 +858,39 @@ export const CreateExperience: React.FC = () => {
         const hasTiers = (ev.price_tiers?.length ?? 0) > 0;
 
         const parsedCustomSlots =
-          ev.schedule_type === 'custom_dates' || (ev.custom_dates && ev.custom_dates.length > 0)
+          ev.schedule_type === "custom_dates" ||
+          (ev.custom_dates && ev.custom_dates.length > 0)
             ? (ev.custom_dates ?? []).map((d) => utcToISTInputs(d))
             : [{ date: dt.date, time: dt.time }];
 
-        const computedScheduleType: 'one_time' | 'recurring' | 'custom_dates' =
-          ev.schedule_type === 'custom_dates' || (ev.custom_dates && ev.custom_dates.length > 0)
-            ? 'custom_dates'
+        const computedScheduleType: "one_time" | "recurring" | "custom_dates" =
+          ev.schedule_type === "custom_dates" ||
+          (ev.custom_dates && ev.custom_dates.length > 0)
+            ? "custom_dates"
             : ev.is_recurring
-            ? 'recurring'
-            : 'one_time';
+              ? "recurring"
+              : "one_time";
 
         setForm((prev) => ({
           ...prev,
-          title: ev.title ?? '',
-          slug: ev.slug ?? '',
-          hookLine: ev.hook_line ?? '',
-          mood: ev.mood ?? '',
-          description: ev.description ?? '',
+          title: ev.title ?? "",
+          slug: ev.slug ?? "",
+          hookLine: ev.hook_line ?? "",
+          mood: ev.mood ?? "",
+          description: ev.description ?? "",
           coverImagePreview: ev.cover_image_url ?? null,
           existingCoverUrl: ev.cover_image_url ?? null,
           galleryPreviews: ev.gallery_urls ?? [],
           existingGalleryUrls: ev.gallery_urls ?? [],
           isOnline: ev.is_online,
-          location: ev.location ?? '',
-          meetingLink: ev.meeting_link ?? '',
-          googleMapsUrl: ev.google_maps_url ?? '',
+          location: ev.location ?? "",
+          meetingLink: ev.meeting_link ?? "",
+          googleMapsUrl: ev.google_maps_url ?? "",
           durationMinutes: ev.duration_minutes ?? 60,
           minGroupSize: ev.min_group_size ?? 1,
           maxGroupSize: ev.max_group_size ?? ev.capacity ?? 10,
           languages: ev.languages ?? [],
-          level: ev.level ?? '',
+          level: ev.level ?? "",
           isFree: ev.is_free,
           priceCents: ev.price_cents ?? 0,
           useTiers: hasTiers,
@@ -834,23 +898,28 @@ export const CreateExperience: React.FC = () => {
             ? ev.price_tiers!.map((t) => ({
                 name: t.name,
                 priceStr: (t.price_cents / 100).toString(),
-                seatsStr: t.capacity ? String(t.capacity) : '',
+                seatsStr: t.capacity ? String(t.capacity) : "",
               }))
-            : [{ name: '', priceStr: '' }],
+            : [{ name: "", priceStr: "" }],
           monthlyPassEnabled: !!ev.monthly_pass_price_cents,
           monthlyPassPriceStr: ev.monthly_pass_price_cents
             ? (ev.monthly_pass_price_cents / 100).toString()
-            : '',
-          monthlyPassSessionsStr: ev.monthly_pass_session_limit?.toString() ?? '',
-          monthlyPassCapacityStr: ev.monthly_pass_capacity?.toString() ?? '',
+            : "",
+          monthlyPassSessionsStr:
+            ev.monthly_pass_session_limit?.toString() ?? "",
+          monthlyPassCapacityStr: ev.monthly_pass_capacity?.toString() ?? "",
           eventDate: dt.date,
           eventTime: dt.time,
-          endTime: endDt?.time ?? '',
+          endTime: endDt?.time ?? "",
           isRecurring: ev.is_recurring,
-          recurrenceRule: ev.recurrence_rule ?? '',
+          recurrenceRule: ev.recurrence_rule ?? "",
           scheduleType: computedScheduleType,
-          customDatesList: parsedCustomSlots.length > 0 ? parsedCustomSlots : [{ date: dt.date, time: dt.time }],
-          sessionType: ev.session_type === 'one_on_one' ? 'one_on_one' : 'group',
+          customDatesList:
+            parsedCustomSlots.length > 0
+              ? parsedCustomSlots
+              : [{ date: dt.date, time: dt.time }],
+          sessionType:
+            ev.session_type === "one_on_one" ? "one_on_one" : "group",
           // The stored windows decide the mode — weekly ones carry a weekday.
           sessionWindows:
             ev.session_windows && ev.session_windows.length > 0
@@ -860,42 +929,47 @@ export const CreateExperience: React.FC = () => {
                   end: w.end,
                   weekday: w.weekday ?? undefined,
                 }))
-              : [{ date: '', start: '', end: '' }],
+              : [{ date: "", start: "", end: "" }],
           breakMinutes: ev.break_minutes ?? 0,
           sessionIsWeekly: (ev.session_windows ?? []).some(
             (w) => w.weekday !== undefined && w.weekday !== null,
           ),
-          cancellationPolicy: ev.cancellation_policy ?? 'flexible',
-          termsAndConditions: ev.terms_and_conditions ?? '',
+          cancellationPolicy: ev.cancellation_policy ?? "flexible",
+          termsAndConditions: ev.terms_and_conditions ?? "",
           requiresAttendeeDetails: ev.requires_attendee_details,
           attendeeFields: ev.attendee_fields ?? [],
           isPrivate: ev.is_private,
-          privateAccessMode: ev.private_access_mode === 'rsvp' ? 'rsvp' : 'passkey',
-          accessMode: accessPasskey ? 'shared' : ev.is_private ? 'unique' : 'shared',
+          privateAccessMode:
+            ev.private_access_mode === "rsvp" ? "rsvp" : "passkey",
+          accessMode: accessPasskey
+            ? "shared"
+            : ev.is_private
+              ? "unique"
+              : "shared",
           accessPasskey,
           passkeyGrantsFree: ev.passkey_grants_free,
         }));
-        setEventStatus(ev.status ?? '');
+        setEventStatus(ev.status ?? "");
         // The editor only reports its length on change, so seed the counter.
         setDescriptionTextLength(
-          new DOMParser().parseFromString(ev.description ?? '', 'text/html').body
-            .textContent?.length ?? 0,
+          new DOMParser().parseFromString(ev.description ?? "", "text/html")
+            .body.textContent?.length ?? 0,
         );
         // Lock the host to the event's owner (host can't change on edit), then
         // fill in their real name and photo for the "Hosted by" card.
-        setSelectedHost({ id: ev.host_id, name: 'Host', city: '' } as Host);
+        setSelectedHost({ id: ev.host_id, name: "Host", city: "" } as Host);
         if (ev.host_id) {
           fetchHostDetail(ev.host_id)
             .then((d) => {
               if (cancelled) return;
               const name =
-                `${d.host.first_name ?? ''} ${d.host.last_name ?? ''}`.trim() ||
+                `${d.host.first_name ?? ""} ${d.host.last_name ?? ""}`.trim() ||
                 d.user?.name ||
-                'Host';
+                "Host";
               setSelectedHost({
                 id: ev.host_id,
                 name,
-                city: d.host.city ?? d.user?.city ?? '',
+                city: d.host.city ?? d.user?.city ?? "",
                 avatarUrl: d.host.avatar_url,
               } as Host & { avatarUrl?: string });
             })
@@ -905,7 +979,7 @@ export const CreateExperience: React.FC = () => {
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : 'Failed to load experience.',
+          err instanceof Error ? err.message : "Failed to load experience.",
         );
       } finally {
         if (!cancelled) setLoadingEvent(false);
@@ -928,15 +1002,15 @@ export const CreateExperience: React.FC = () => {
     const handle = setTimeout(() => {
       void (async () => {
         if (!raw) {
-          setSlugStatus('invalid');
+          setSlugStatus("invalid");
           return;
         }
-        setSlugStatus('checking');
+        setSlugStatus("checking");
         try {
           const res = await checkEventSlugAvailability(raw, editEventId);
-          setSlugStatus(res.available ? 'available' : 'taken');
+          setSlugStatus(res.available ? "available" : "taken");
         } catch {
-          setSlugStatus('idle');
+          setSlugStatus("idle");
         }
       })();
     }, 400);
@@ -944,7 +1018,6 @@ export const CreateExperience: React.FC = () => {
   }, [form.slug, isEdit, editEventId]);
 
   // Ticket-tier row helpers (dynamic pricing).
-
 
   // Toggle a language in/out of the multi-select list.
   const toggleLanguage = (lang: string) => {
@@ -956,14 +1029,14 @@ export const CreateExperience: React.FC = () => {
     }));
   };
   // Free-text language input for the "Other" option.
-  const [customLanguage, setCustomLanguage] = useState('');
+  const [customLanguage, setCustomLanguage] = useState("");
   const addCustomLanguage = () => {
     const value = customLanguage.trim();
     if (!value) return;
     if (!form.languages.some((l) => l.toLowerCase() === value.toLowerCase())) {
-      updateForm('languages', [...form.languages, value]);
+      updateForm("languages", [...form.languages, value]);
     }
-    setCustomLanguage('');
+    setCustomLanguage("");
   };
 
   /* ---------------------------------------------------------------- */
@@ -972,7 +1045,7 @@ export const CreateExperience: React.FC = () => {
   const handleCoverUpload = (files: File[]) => {
     const file = files[0];
     if (file) {
-      setCropTarget('profile');
+      setCropTarget("profile");
       setCropQueue([file]);
     }
   };
@@ -980,23 +1053,23 @@ export const CreateExperience: React.FC = () => {
   const handleGalleryUpload = (files: File[]) => {
     if (files.length > 0) {
       setRecropIndex(null);
-      setCropTarget('cover');
+      setCropTarget("cover");
       setCropQueue(files);
     }
   };
 
   const handleCropConfirm = (blob: Blob, originalName: string) => {
-    const ext = blob.type === 'image/png' ? 'png' : 'jpg';
-    const baseName = originalName.replace(/\.[^.]+$/, '') || 'image';
+    const ext = blob.type === "image/png" ? "png" : "jpg";
+    const baseName = originalName.replace(/\.[^.]+$/, "") || "image";
     const croppedFile = new File([blob], `${baseName}-cropped.${ext}`, {
       type: blob.type,
     });
 
-    if (cropTarget === 'profile') {
-      if (form.coverImagePreview?.startsWith('blob:'))
+    if (cropTarget === "profile") {
+      if (form.coverImagePreview?.startsWith("blob:"))
         URL.revokeObjectURL(form.coverImagePreview);
-      updateForm('coverImage', croppedFile);
-      updateForm('coverImagePreview', URL.createObjectURL(croppedFile));
+      updateForm("coverImage", croppedFile);
+      updateForm("coverImagePreview", URL.createObjectURL(croppedFile));
     } else {
       const newPreview = URL.createObjectURL(croppedFile);
       const at = recropIndex;
@@ -1005,7 +1078,7 @@ export const CreateExperience: React.FC = () => {
         if (at !== null && at < previews.length) {
           // Re-crop: the new photo takes the old one's place.
           const old = previews[at];
-          if (old?.startsWith('blob:')) URL.revokeObjectURL(old);
+          if (old?.startsWith("blob:")) URL.revokeObjectURL(old);
           previews[at] = newPreview;
         } else {
           previews.push(newPreview);
@@ -1030,7 +1103,7 @@ export const CreateExperience: React.FC = () => {
   ): FormData => {
     const fileByBlob: Record<string, File> = { ...added };
     prev.galleryPreviews
-      .filter((p) => p.startsWith('blob:'))
+      .filter((p) => p.startsWith("blob:"))
       .forEach((p, i) => {
         const f = prev.galleryImages[i];
         if (f && !fileByBlob[p]) fileByBlob[p] = f;
@@ -1039,10 +1112,10 @@ export const CreateExperience: React.FC = () => {
       ...prev,
       galleryPreviews: previews,
       galleryImages: previews
-        .filter((p) => p.startsWith('blob:'))
+        .filter((p) => p.startsWith("blob:"))
         .map((p) => fileByBlob[p])
         .filter((f): f is File => !!f),
-      existingGalleryUrls: previews.filter((p) => !p.startsWith('blob:')),
+      existingGalleryUrls: previews.filter((p) => !p.startsWith("blob:")),
     };
   };
 
@@ -1050,7 +1123,7 @@ export const CreateExperience: React.FC = () => {
     const preview = form.galleryPreviews[index];
     // Only blob: previews (freshly added files) own an object URL to revoke;
     // existing https URLs must not be revoked.
-    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+    if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
     setForm((prev) =>
       withGallery(
         prev,
@@ -1065,13 +1138,15 @@ export const CreateExperience: React.FC = () => {
   const [recropIndex, setRecropIndex] = useState<number | null>(null);
   const [loadingRecrop, setLoadingRecrop] = useState<string | null>(null);
   const loadForRecrop = async (url: string): Promise<File | null> => {
-    const name = decodeURIComponent(url.split('?')[0]?.split('/').pop() || 'image.jpg');
+    const name = decodeURIComponent(
+      url.split("?")[0]?.split("/").pop() || "image.jpg",
+    );
     const proxied = `${SITE_PROXY}?url=${encodeURIComponent(url)}`;
     // Local previews load directly; S3 never allows this origin, so go
     // straight to the proxy; anything else tries directly first.
-    const attempts = url.startsWith('blob:')
+    const attempts = url.startsWith("blob:")
       ? [url]
-      : url.includes('.amazonaws.com/')
+      : url.includes(".amazonaws.com/")
         ? [proxied]
         : [url, proxied];
     for (const src of attempts) {
@@ -1079,7 +1154,7 @@ export const CreateExperience: React.FC = () => {
         const res = await fetch(src);
         if (!res.ok) continue;
         const blob = await res.blob();
-        if (!blob.type.startsWith('image/')) continue;
+        if (!blob.type.startsWith("image/")) continue;
         return new File([blob], name, { type: blob.type });
       } catch {
         // Blocked by CORS — try the proxy next.
@@ -1090,14 +1165,16 @@ export const CreateExperience: React.FC = () => {
   const recropPoster = async () => {
     const url = form.coverImagePreview;
     if (!url) return;
-    setLoadingRecrop('poster');
+    setLoadingRecrop("poster");
     const file = await loadForRecrop(url);
     setLoadingRecrop(null);
     if (!file) {
-      toast.error("Couldn't load this image to re-crop. Upload the original instead.");
+      toast.error(
+        "Couldn't load this image to re-crop. Upload the original instead.",
+      );
       return;
     }
-    setCropTarget('profile');
+    setCropTarget("profile");
     setCropQueue([file]);
   };
   const recropGallery = async (index: number) => {
@@ -1107,10 +1184,12 @@ export const CreateExperience: React.FC = () => {
     const file = await loadForRecrop(url);
     setLoadingRecrop(null);
     if (!file) {
-      toast.error("Couldn't load this photo to re-crop. Upload the original instead.");
+      toast.error(
+        "Couldn't load this photo to re-crop. Upload the original instead.",
+      );
       return;
     }
-    setCropTarget('cover');
+    setCropTarget("cover");
     setRecropIndex(index);
     setCropQueue([file]);
   };
@@ -1120,7 +1199,7 @@ export const CreateExperience: React.FC = () => {
   /* ---------------------------------------------------------------- */
   // The 1:1 availability error, if the windows don't make any sessions.
   const oneOnOneProblem = (): string | null => {
-    if (form.sessionType !== 'one_on_one') return null;
+    if (form.sessionType !== "one_on_one") return null;
     const { errors, count } = form.sessionIsWeekly
       ? (() => {
           const r = generateWeeklySessions(
@@ -1139,7 +1218,8 @@ export const CreateExperience: React.FC = () => {
           return { errors: r.errors, count: r.slots.length };
         })();
     if (errors.length > 0) return errors[0] ?? null;
-    if (count === 0) return "Your availability windows don't fit a single session";
+    if (count === 0)
+      return "Your availability windows don't fit a single session";
     return null;
   };
 
@@ -1147,7 +1227,7 @@ export const CreateExperience: React.FC = () => {
   const validateForPublish = (): boolean => {
     if (!selectedHost?.id) {
       setShowErrors(true);
-      toast.error('Please select the host to create this experience for');
+      toast.error("Please select the host to create this experience for");
       return false;
     }
     const problem = firstProblem(form, {
@@ -1170,7 +1250,7 @@ export const CreateExperience: React.FC = () => {
     // A draft still needs at least a title so the host can find it later.
     if (asDraft) {
       if (!form.title.trim()) {
-        toast.error('Add a title before saving as draft');
+        toast.error("Add a title before saving as draft");
         return;
       }
     } else if (!validateForPublish()) {
@@ -1178,50 +1258,57 @@ export const CreateExperience: React.FC = () => {
     }
     const hostId = selectedHost?.id;
     if (!hostId) {
-      toast.error('Please select the host to create this experience for');
+      toast.error("Please select the host to create this experience for");
       return;
     }
     // Guard the editable slug: never submit an empty or already-taken slug.
     if (isEdit) {
       if (!form.slug.trim()) {
-        toast.error('The URL slug cannot be empty');
+        toast.error("The URL slug cannot be empty");
         return;
       }
-      if (slugStatus === 'taken') {
-        toast.error('That URL slug is already in use — pick another');
+      if (slugStatus === "taken") {
+        toast.error("That URL slug is already in use — pick another");
         return;
       }
     }
-    setSubmitType(asDraft ? 'draft' : 'publish');
+    setSubmitType(asDraft ? "draft" : "publish");
     setIsSubmitting(true);
 
     try {
       // Upload images
       // Start from existing (already-hosted) URLs so an edit that doesn't touch
       // images preserves them; newly picked files are uploaded and merged in.
-      let coverImageUrl: string | undefined = form.existingCoverUrl ?? undefined;
+      let coverImageUrl: string | undefined =
+        form.existingCoverUrl ?? undefined;
       let galleryUrls: string[] = [...form.existingGalleryUrls];
 
       if (form.coverImage) {
         try {
-          const uploadRes = await uploadFiles([form.coverImage], 'events/covers');
+          const uploadRes = await uploadFiles(
+            [form.coverImage],
+            "events/covers",
+          );
           if (uploadRes[0]?.url) coverImageUrl = uploadRes[0].url;
         } catch (uploadErr) {
-          console.warn('Cover image upload failed:', uploadErr);
+          console.warn("Cover image upload failed:", uploadErr);
         }
       }
 
       if (form.galleryImages.length > 0) {
         try {
-          const uploadRes = await uploadFiles(form.galleryImages, 'events/gallery');
+          const uploadRes = await uploadFiles(
+            form.galleryImages,
+            "events/gallery",
+          );
           // Put each uploaded URL back where its preview sat, so a re-cropped
           // photo keeps its place in the gallery.
           let k = 0;
           galleryUrls = form.galleryPreviews
-            .map((p) => (p.startsWith('blob:') ? uploadRes[k++]?.url : p))
+            .map((p) => (p.startsWith("blob:") ? uploadRes[k++]?.url : p))
             .filter((u): u is string => !!u);
         } catch (uploadErr) {
-          console.warn('Gallery upload failed:', uploadErr);
+          console.warn("Gallery upload failed:", uploadErr);
         }
       }
 
@@ -1233,9 +1320,9 @@ export const CreateExperience: React.FC = () => {
       // them from the windows on read — but still needs a real upcoming session
       // as the event's anchor time.
       const isWeeklyOneOnOne =
-        form.sessionType === 'one_on_one' && form.sessionIsWeekly;
+        form.sessionType === "one_on_one" && form.sessionIsWeekly;
       const oneOnOneSlots =
-        form.sessionType === 'one_on_one' && !form.sessionIsWeekly
+        form.sessionType === "one_on_one" && !form.sessionIsWeekly
           ? generateSessionSlots(
               form.sessionWindows,
               form.durationMinutes,
@@ -1250,32 +1337,41 @@ export const CreateExperience: React.FC = () => {
           )
         : null;
 
-      const firstSlot = form.sessionType === 'one_on_one'
-        ? {
-            date: (isWeeklyOneOnOne ? weeklyAnchor?.date : oneOnOneSlots[0]?.date) ?? '',
-            time: (isWeeklyOneOnOne ? weeklyAnchor?.time : oneOnOneSlots[0]?.time) ?? '',
-          }
-        : form.scheduleType === 'custom_dates' && form.customDatesList[0]?.date && form.customDatesList[0]?.time
-        ? form.customDatesList[0]
-        : { date: form.eventDate, time: form.eventTime };
+      const firstSlot =
+        form.sessionType === "one_on_one"
+          ? {
+              date:
+                (isWeeklyOneOnOne
+                  ? weeklyAnchor?.date
+                  : oneOnOneSlots[0]?.date) ?? "",
+              time:
+                (isWeeklyOneOnOne
+                  ? weeklyAnchor?.time
+                  : oneOnOneSlots[0]?.time) ?? "",
+            }
+          : form.scheduleType === "custom_dates" &&
+              form.customDatesList[0]?.date &&
+              form.customDatesList[0]?.time
+            ? form.customDatesList[0]
+            : { date: form.eventDate, time: form.eventTime };
 
       const hasDateTime = !!(firstSlot.date && firstSlot.time);
       const eventDateTime = hasDateTime
         ? new Date(istInputToUTCISO(firstSlot.date, firstSlot.time))
         : new Date();
       let endDateTime: Date;
-      if (form.sessionType === 'one_on_one') {
+      if (form.sessionType === "one_on_one") {
         // Spans ONE session: consumers derive a per-slot duration from
         // (end_time - time), so stretching it across the day would make every
         // slot look hours long.
         endDateTime = new Date(
-          eventDateTime.getTime() + (form.durationMinutes || 60) * 60 * 1000
+          eventDateTime.getTime() + (form.durationMinutes || 60) * 60 * 1000,
         );
       } else if (form.endTime && firstSlot.date) {
         endDateTime = new Date(istInputToUTCISO(firstSlot.date, form.endTime));
       } else {
         endDateTime = new Date(
-          eventDateTime.getTime() + (form.durationMinutes || 60) * 60 * 1000
+          eventDateTime.getTime() + (form.durationMinutes || 60) * 60 * 1000,
         );
       }
 
@@ -1293,41 +1389,50 @@ export const CreateExperience: React.FC = () => {
         is_online: form.isOnline,
         location: form.isOnline ? undefined : form.location || undefined,
         meeting_link: form.isOnline ? form.meetingLink || undefined : undefined,
-        google_maps_url: !form.isOnline ? form.googleMapsUrl || undefined : undefined,
+        google_maps_url: !form.isOnline
+          ? form.googleMapsUrl || undefined
+          : undefined,
         duration_minutes: form.durationMinutes,
         // A one-on-one slot seats exactly one guest — that single seat is what
         // stops a second booking landing on the same session.
-        capacity: form.sessionType === 'one_on_one' ? 1 : form.maxGroupSize,
-        min_group_size: form.sessionType === 'one_on_one' ? 1 : form.minGroupSize,
-        max_group_size: form.sessionType === 'one_on_one' ? 1 : form.maxGroupSize,
+        capacity: form.sessionType === "one_on_one" ? 1 : form.maxGroupSize,
+        min_group_size:
+          form.sessionType === "one_on_one" ? 1 : form.minGroupSize,
+        max_group_size:
+          form.sessionType === "one_on_one" ? 1 : form.maxGroupSize,
         languages: form.languages,
         level: form.level || undefined,
         ...pricingPayload(form),
-        schedule_type: isWeeklyOneOnOne ? ('recurring' as const) : form.scheduleType,
+        schedule_type: isWeeklyOneOnOne
+          ? ("recurring" as const)
+          : form.scheduleType,
         custom_dates: isWeeklyOneOnOne
           ? []
-          : form.sessionType === 'one_on_one'
-          ? slotsToCustomDates(oneOnOneSlots)
-          : form.scheduleType === 'custom_dates'
-          ? form.customDatesList
-              .filter((s) => s.date && s.time)
-              .map((s) => istInputToUTCISO(s.date, s.time))
-          : undefined,
+          : form.sessionType === "one_on_one"
+            ? slotsToCustomDates(oneOnOneSlots)
+            : form.scheduleType === "custom_dates"
+              ? form.customDatesList
+                  .filter((s) => s.date && s.time)
+                  .map((s) => istInputToUTCISO(s.date, s.time))
+              : undefined,
         session_type: form.sessionType,
-        break_minutes: form.sessionType === 'one_on_one' ? form.breakMinutes : undefined,
+        break_minutes:
+          form.sessionType === "one_on_one" ? form.breakMinutes : undefined,
         session_windows:
-          form.sessionType === 'one_on_one' ? form.sessionWindows : undefined,
-        is_recurring: isWeeklyOneOnOne || form.scheduleType === 'recurring',
+          form.sessionType === "one_on_one" ? form.sessionWindows : undefined,
+        is_recurring: isWeeklyOneOnOne || form.scheduleType === "recurring",
         // The weekdays live in the windows, so the rule only says "weekly".
         recurrence_rule: isWeeklyOneOnOne
-          ? 'FREQ=WEEKLY'
-          : form.scheduleType === 'recurring'
-          ? form.recurrenceRule
-          : undefined,
+          ? "FREQ=WEEKLY"
+          : form.scheduleType === "recurring"
+            ? form.recurrenceRule
+            : undefined,
         cancellation_policy: form.cancellationPolicy,
         terms_and_conditions: form.termsAndConditions.trim() || undefined,
         requires_attendee_details: form.requiresAttendeeDetails,
-        attendee_fields: form.requiresAttendeeDetails ? form.attendeeFields : [],
+        attendee_fields: form.requiresAttendeeDetails
+          ? form.attendeeFields
+          : [],
         ...accessPayload(form),
       };
 
@@ -1343,37 +1448,42 @@ export const CreateExperience: React.FC = () => {
           // backend keeps the existing image(s) when these fields are omitted, so
           // an empty gallery must be sent as [] and a removed cover as "".
           gallery_urls: galleryUrls,
-          cover_image_url: coverImageUrl ?? '',
+          cover_image_url: coverImageUrl ?? "",
         });
         let publishFailed = false;
         if (!asDraft) {
           try {
             await publishEvent(editEventId, hostId);
-            if (eventStatus === 'draft') setEventStatus('live');
+            if (eventStatus === "draft") setEventStatus("live");
           } catch (publishErr) {
             publishFailed = true;
-            console.warn('Publish failed:', publishErr);
+            console.warn("Publish failed:", publishErr);
           }
         }
         setCreatedEventId(editEventId);
         setSavedAsDraft(asDraft || publishFailed);
         setShowSuccess(true);
         if (publishFailed) {
-          toast.error('Saved, but publishing failed. The experience is still a draft — please try again.');
+          toast.error(
+            "Saved, but publishing failed. The experience is still a draft — please try again.",
+          );
         } else {
-          toast.success(asDraft ? 'Draft saved' : 'Experience updated');
+          toast.success(asDraft ? "Draft saved" : "Experience updated");
         }
       } else {
         const created = await createEvent({
           ...payload,
-          status: asDraft ? 'draft' : 'live',
+          status: asDraft ? "draft" : "live",
         });
         // Auto-publish only when "Publish Experience" was clicked.
         if (!asDraft) {
           try {
             await publishEvent(created.id, hostId);
           } catch (publishErr) {
-            console.warn('Auto-publish failed, event saved as draft:', publishErr);
+            console.warn(
+              "Auto-publish failed, event saved as draft:",
+              publishErr,
+            );
           }
         }
         setCreatedEventId(created.id);
@@ -1381,14 +1491,16 @@ export const CreateExperience: React.FC = () => {
         setShowSuccess(true);
         toast.success(
           asDraft
-            ? `Draft saved under ${selectedHost?.name ?? 'the host'}'s experiences.`
-            : 'Experience created successfully!',
+            ? `Draft saved under ${selectedHost?.name ?? "the host"}'s experiences.`
+            : "Experience created successfully!",
         );
       }
     } catch (err) {
-      console.error('Failed to save experience:', err);
+      console.error("Failed to save experience:", err);
       toast.error(
-        err instanceof Error ? err.message : 'Failed to save experience. Please try again.'
+        err instanceof Error
+          ? err.message
+          : "Failed to save experience. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -1406,13 +1518,13 @@ export const CreateExperience: React.FC = () => {
     setDeleting(true);
     try {
       await deleteEvent(editEventId, selectedHost.id);
-      toast.success('Experience deleted');
-      navigate('/experiences');
+      toast.success("Experience deleted");
+      navigate("/experiences");
     } catch (err) {
       toast.error(
         err instanceof Error
           ? err.message
-          : 'Failed to delete. Cancel active bookings first, then try again.',
+          : "Failed to delete. Cancel active bookings first, then try again.",
       );
     } finally {
       setDeleting(false);
@@ -1426,17 +1538,19 @@ export const CreateExperience: React.FC = () => {
     if (!editEventId || !selectedHost?.id) return;
     if (
       !window.confirm(
-        `Cancel "${form.title || 'this experience'}"? Every upcoming booking is refunded to the guest's wallet. This can't be undone.`,
+        `Cancel "${form.title || "this experience"}"? Every upcoming booking is refunded to the guest's wallet. This can't be undone.`,
       )
     )
       return;
     setCancelling(true);
     try {
       await cancelEvent(editEventId, selectedHost.id);
-      setEventStatus('cancelled');
-      toast.success('Experience cancelled and guests refunded');
+      setEventStatus("cancelled");
+      toast.success("Experience cancelled and guests refunded");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to cancel the experience.');
+      toast.error(
+        err instanceof Error ? err.message : "Failed to cancel the experience.",
+      );
     } finally {
       setCancelling(false);
     }
@@ -1444,12 +1558,13 @@ export const CreateExperience: React.FC = () => {
 
   // With an end time, a group session's length is just end minus start, so
   // setting either time also sets the duration.
-  const setGroupTime = (key: 'eventTime' | 'endTime', value: string) =>
+  const setGroupTime = (key: "eventTime" | "endTime", value: string) =>
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-      if (next.sessionType !== 'group' || !next.eventTime || !next.endTime) return next;
-      const [sh = 0, sm = 0] = next.eventTime.split(':').map(Number);
-      const [eh = 0, em = 0] = next.endTime.split(':').map(Number);
+      if (next.sessionType !== "group" || !next.eventTime || !next.endTime)
+        return next;
+      const [sh = 0, sm = 0] = next.eventTime.split(":").map(Number);
+      const [eh = 0, em = 0] = next.endTime.split(":").map(Number);
       let mins = eh * 60 + em - (sh * 60 + sm);
       if (mins <= 0) mins += 24 * 60; // ends after midnight
       return mins >= 15 ? { ...next, durationMinutes: mins } : next;
@@ -1467,15 +1582,18 @@ export const CreateExperience: React.FC = () => {
   }
 
   const err = (cond: boolean) => showErrors && cond;
-  const isOneOnOne = form.sessionType === 'one_on_one';
-  const isDraftEvent = isEdit && eventStatus === 'draft';
+  const isOneOnOne = form.sessionType === "one_on_one";
+  const isDraftEvent = isEdit && eventStatus === "draft";
   const publicUrl = `${SITE_URL}/experience/${form.slug || editEventId}`;
-  const hostName = selectedHost?.name ?? 'the host';
+  const hostName = selectedHost?.name ?? "the host";
 
   return (
     <div className="msm-dark relative min-h-screen overflow-x-clip pb-24">
       {/* Soft colour from the poster behind everything, like the event page */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+      >
         {form.coverImagePreview ? (
           <img
             src={form.coverImagePreview}
@@ -1492,7 +1610,7 @@ export const CreateExperience: React.FC = () => {
         {/* Header */}
         <div className="mb-8 flex items-center gap-3">
           <button
-            onClick={() => navigate('/experiences')}
+            onClick={() => navigate("/experiences")}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white transition hover:bg-white/10"
             aria-label="Back to experiences"
           >
@@ -1500,22 +1618,22 @@ export const CreateExperience: React.FC = () => {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="font-outfit text-2xl font-bold text-white">
-              {isEdit ? 'Edit experience' : 'New experience'}
+              {isEdit ? "Edit experience" : "New experience"}
             </h1>
             <p className="truncate text-sm text-white/50">
               {selectedHost
-                ? `On behalf of ${hostName}${isEdit && !isDraftEvent ? ' · changes go live as soon as you save' : ''}`
-                : 'Pick the host this experience belongs to'}
+                ? `On behalf of ${hostName}${isEdit && !isDraftEvent ? " · changes go live as soon as you save" : ""}`
+                : "Pick the host this experience belongs to"}
             </p>
           </div>
           {isEdit && eventStatus && (
             <span
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                eventStatus === 'live'
-                  ? 'bg-emerald-400/15 text-emerald-300'
-                  : eventStatus === 'paused'
-                    ? 'bg-amber-400/15 text-amber-300'
-                    : 'bg-white/10 text-white/70'
+                eventStatus === "live"
+                  ? "bg-emerald-400/15 text-emerald-300"
+                  : eventStatus === "paused"
+                    ? "bg-amber-400/15 text-amber-300"
+                    : "bg-white/10 text-white/70"
               }`}
             >
               {eventStatus}
@@ -1533,12 +1651,12 @@ export const CreateExperience: React.FC = () => {
               isPrivate={form.isPrivate}
               onUpload={handleCoverUpload}
               onRemove={() => {
-                if (form.coverImagePreview?.startsWith('blob:'))
+                if (form.coverImagePreview?.startsWith("blob:"))
                   URL.revokeObjectURL(form.coverImagePreview);
-                updateForm('coverImage', null);
-                updateForm('coverImagePreview', null);
+                updateForm("coverImage", null);
+                updateForm("coverImagePreview", null);
                 // Clear the persisted URL too, otherwise save re-sends the old image.
-                updateForm('existingCoverUrl', null);
+                updateForm("existingCoverUrl", null);
               }}
             />
             <div className="flex items-start gap-3 px-1">
@@ -1553,13 +1671,15 @@ export const CreateExperience: React.FC = () => {
                   className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
                 >
                   <FiCrop size={14} />
-                  {loadingRecrop === 'poster' ? 'Loading…' : 'Re-crop to 4:5'}
+                  {loadingRecrop === "poster" ? "Loading…" : "Re-crop to 4:5"}
                 </button>
               )}
             </div>
             <div className="space-y-3">
               <div className="border-b border-white/[0.08] pb-2">
-                <h2 className="font-outfit text-base font-semibold text-white">Hosted by</h2>
+                <h2 className="font-outfit text-base font-semibold text-white">
+                  Hosted by
+                </h2>
               </div>
               <HostPicker
                 selectedHost={selectedHost}
@@ -1575,7 +1695,7 @@ export const CreateExperience: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => updateForm('isPrivate', !form.isPrivate)}
+                onClick={() => updateForm("isPrivate", !form.isPrivate)}
                 title="Tap to switch"
                 className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:border-white/30"
               >
@@ -1585,13 +1705,13 @@ export const CreateExperience: React.FC = () => {
                   <LuGlobe className="h-3.5 w-3.5 text-[#D8B4FE]" />
                 )}
                 {!form.isPrivate
-                  ? 'Anyone can book'
-                  : form.privateAccessMode === 'rsvp'
-                    ? 'People I approve'
-                    : 'People with a code'}
+                  ? "Anyone can book"
+                  : form.privateAccessMode === "rsvp"
+                    ? "People I approve"
+                    : "People with a code"}
               </button>
               <div className="ml-auto w-full sm:w-auto">
-                <Segmented<'group' | 'one_on_one'>
+                <Segmented<"group" | "one_on_one">
                   value={form.sessionType}
                   onChange={(v) =>
                     setForm((prev) => ({
@@ -1599,13 +1719,14 @@ export const CreateExperience: React.FC = () => {
                       sessionType: v,
                       // One-on-one slots come from availability windows; a
                       // group event starts as a single date again.
-                      scheduleType: v === 'one_on_one' ? 'custom_dates' : 'one_time',
+                      scheduleType:
+                        v === "one_on_one" ? "custom_dates" : "one_time",
                       isRecurring: false,
                     }))
                   }
                   options={[
-                    { value: 'group', label: 'Group' },
-                    { value: 'one_on_one', label: '1:1' },
+                    { value: "group", label: "Group" },
+                    { value: "one_on_one", label: "1:1" },
                   ]}
                 />
               </div>
@@ -1616,46 +1737,47 @@ export const CreateExperience: React.FC = () => {
             {/* What */}
             <section className="space-y-4">
               <MoodSelector
-                kind={isOneOnOne ? 'session' : 'experience'}
+                kind={isOneOnOne ? "session" : "experience"}
                 value={form.mood}
-                onChange={(v) => updateForm('mood', v)}
+                onChange={(v) => updateForm("mood", v)}
                 hasError={err(!form.mood)}
               />
               <TitleField
                 mood={form.mood}
                 value={form.title}
-                onChange={(v) => updateForm('title', v)}
+                onChange={(v) => updateForm("title", v)}
                 onSelectTemplate={(title, hookLine) => {
-                  updateForm('title', title);
-                  updateForm('hookLine', hookLine);
+                  updateForm("title", title);
+                  updateForm("hookLine", hookLine);
                 }}
                 hasError={err(!form.title.trim())}
               />
               <input
                 type="text"
                 value={form.hookLine}
-                onChange={(e) => updateForm('hookLine', e.target.value)}
+                onChange={(e) => updateForm("hookLine", e.target.value)}
                 placeholder="A short tagline guests see under the name"
                 aria-label="Short tagline"
                 maxLength={150}
-                className={`${INLINE_FIELD} ${err(!form.hookLine.trim()) ? '!border-red-500/70' : ''}`}
-                style={{ backgroundColor: 'transparent' }}
+                className={`${INLINE_FIELD} ${err(!form.hookLine.trim()) ? "!border-red-500/70" : ""}`}
+                style={{ backgroundColor: "transparent" }}
               />
             </section>
 
             {/* When */}
             <section className="space-y-3">
               {!isOneOnOne &&
-                (form.scheduleType === 'one_time' || form.scheduleType === 'recurring') && (
+                (form.scheduleType === "one_time" ||
+                  form.scheduleType === "recurring") && (
                   <div className="flex flex-wrap items-center gap-2">
                     <DatePill
                       value={form.eventDate}
-                      onChange={(v) => updateForm('eventDate', v)}
+                      onChange={(v) => updateForm("eventDate", v)}
                       error={err(!form.eventDate)}
                     />
                     <TimePill
                       value={form.eventTime}
-                      onChange={(v) => setGroupTime('eventTime', v)}
+                      onChange={(v) => setGroupTime("eventTime", v)}
                       placeholder="Start time"
                       ariaLabel="Start time"
                       error={err(!form.eventTime)}
@@ -1663,7 +1785,7 @@ export const CreateExperience: React.FC = () => {
                     <span className="text-white/35">to</span>
                     <TimePill
                       value={form.endTime}
-                      onChange={(v) => setGroupTime('endTime', v)}
+                      onChange={(v) => setGroupTime("endTime", v)}
                       placeholder="End time"
                       start={form.eventTime || undefined}
                       ariaLabel="End time"
@@ -1675,41 +1797,45 @@ export const CreateExperience: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-2">
                   {(
                     [
-                      ['one_time', 'Just once'],
-                      ['recurring', 'Repeats'],
-                      ['custom_dates', 'Several dates'],
+                      ["one_time", "Just once"],
+                      ["recurring", "Repeats"],
+                      ["custom_dates", "Several dates"],
                     ] as const
                   ).map(([key, label]) => (
                     <Chip
                       key={key}
                       active={form.scheduleType === key}
                       onClick={() => {
-                        updateForm('scheduleType', key);
-                        updateForm('isRecurring', key === 'recurring');
+                        updateForm("scheduleType", key);
+                        updateForm("isRecurring", key === "recurring");
                       }}
                     >
                       {label}
                     </Chip>
                   ))}
-                  {form.scheduleType === 'recurring' && (
+                  {form.scheduleType === "recurring" && (
                     <select
                       value={form.recurrenceRule}
-                      onChange={(e) => updateForm('recurrenceRule', e.target.value)}
+                      onChange={(e) =>
+                        updateForm("recurrenceRule", e.target.value)
+                      }
                       className={INLINE_PICKER}
-                      style={{ backgroundColor: 'transparent' }}
+                      style={{ backgroundColor: "transparent" }}
                       aria-label="How often it repeats"
                     >
                       <option value="">How often?</option>
                       <option value="FREQ=DAILY">Daily</option>
                       <option value="FREQ=WEEKLY">Weekly</option>
-                      <option value="FREQ=WEEKLY;INTERVAL=2">Every 2 weeks</option>
+                      <option value="FREQ=WEEKLY;INTERVAL=2">
+                        Every 2 weeks
+                      </option>
                       <option value="FREQ=MONTHLY">Monthly</option>
                       {form.recurrenceRule &&
                         ![
-                          'FREQ=DAILY',
-                          'FREQ=WEEKLY',
-                          'FREQ=WEEKLY;INTERVAL=2',
-                          'FREQ=MONTHLY',
+                          "FREQ=DAILY",
+                          "FREQ=WEEKLY",
+                          "FREQ=WEEKLY;INTERVAL=2",
+                          "FREQ=MONTHLY",
                         ].includes(form.recurrenceRule) && (
                           <option value={form.recurrenceRule}>
                             Custom ({form.recurrenceRule})
@@ -1720,18 +1846,21 @@ export const CreateExperience: React.FC = () => {
                 </div>
               )}
 
-              {!isOneOnOne && form.scheduleType === 'custom_dates' && (
+              {!isOneOnOne && form.scheduleType === "custom_dates" && (
                 <div className="space-y-2">
                   {form.customDatesList.map((slot, idx) => (
-                    <div key={idx} className="flex flex-wrap items-center gap-2">
+                    <div
+                      key={idx}
+                      className="flex flex-wrap items-center gap-2"
+                    >
                       <DatePill
                         value={slot.date}
-                        onChange={(v) => updateCustomSlot(idx, 'date', v)}
+                        onChange={(v) => updateCustomSlot(idx, "date", v)}
                         placeholder={`Date ${idx + 1}`}
                       />
                       <TimePill
                         value={slot.time}
-                        onChange={(v) => updateCustomSlot(idx, 'time', v)}
+                        onChange={(v) => updateCustomSlot(idx, "time", v)}
                         placeholder="Start time"
                         ariaLabel={`Start time ${idx + 1}`}
                       />
@@ -1760,26 +1889,32 @@ export const CreateExperience: React.FC = () => {
               {isOneOnOne && (
                 <SessionWindowsEditor
                   windows={form.sessionWindows}
-                  onWindowsChange={(windows) => updateForm('sessionWindows', windows)}
+                  onWindowsChange={(windows) =>
+                    updateForm("sessionWindows", windows)
+                  }
                   breakMinutes={form.breakMinutes}
-                  onBreakMinutesChange={(minutes) => updateForm('breakMinutes', minutes)}
+                  onBreakMinutesChange={(minutes) =>
+                    updateForm("breakMinutes", minutes)
+                  }
                   durationMinutes={form.durationMinutes}
                   isWeekly={form.sessionIsWeekly}
-                  onIsWeeklyChange={(weekly) => updateForm('sessionIsWeekly', weekly)}
+                  onIsWeeklyChange={(weekly) =>
+                    updateForm("sessionIsWeekly", weekly)
+                  }
                   showErrors={showErrors}
                 />
               )}
 
-              {(isOneOnOne || form.scheduleType === 'custom_dates') && (
+              {(isOneOnOne || form.scheduleType === "custom_dates") && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="mr-1 text-sm text-white/55">
-                    {isOneOnOne ? 'Each session' : 'Each date lasts'}
+                    {isOneOnOne ? "Each session" : "Each date lasts"}
                   </span>
                   {DURATION_OPTIONS.map((mins) => (
                     <Chip
                       key={mins}
                       active={form.durationMinutes === mins}
-                      onClick={() => updateForm('durationMinutes', mins)}
+                      onClick={() => updateForm("durationMinutes", mins)}
                     >
                       {minsLabel(mins)}
                     </Chip>
@@ -1788,7 +1923,7 @@ export const CreateExperience: React.FC = () => {
                     <NumberInput
                       value={form.durationMinutes}
                       min={15}
-                      onChange={(v) => updateForm('durationMinutes', v)}
+                      onChange={(v) => updateForm("durationMinutes", v)}
                       ariaLabel="Custom length in minutes"
                       className="row-input w-12 bg-transparent text-right text-sm text-white outline-none"
                     />
@@ -1808,11 +1943,11 @@ export const CreateExperience: React.FC = () => {
                   <input
                     type="url"
                     value={form.meetingLink}
-                    onChange={(e) => updateForm('meetingLink', e.target.value)}
+                    onChange={(e) => updateForm("meetingLink", e.target.value)}
                     placeholder="Meeting link (Zoom, Google Meet…)"
                     aria-label="Meeting link"
                     className={INLINE_FIELD}
-                    style={{ backgroundColor: 'transparent' }}
+                    style={{ backgroundColor: "transparent" }}
                   />
                 </div>
               ) : (
@@ -1823,11 +1958,11 @@ export const CreateExperience: React.FC = () => {
                     </span>
                     <LocationSearchInput
                       value={form.location}
-                      onChange={(val) => updateForm('location', val)}
+                      onChange={(val) => updateForm("location", val)}
                       onSelect={(addr, lat, lng) => {
-                        updateForm('location', addr);
+                        updateForm("location", addr);
                         updateForm(
-                          'googleMapsUrl',
+                          "googleMapsUrl",
                           `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
                         );
                       }}
@@ -1838,20 +1973,24 @@ export const CreateExperience: React.FC = () => {
                   <input
                     type="url"
                     value={form.googleMapsUrl}
-                    onChange={(e) => updateForm('googleMapsUrl', e.target.value)}
+                    onChange={(e) =>
+                      updateForm("googleMapsUrl", e.target.value)
+                    }
                     placeholder="Google Maps link (fills in when you pick a place)"
                     aria-label="Google Maps link"
                     className={`${INLINE_FIELD} !text-sm !text-white/60`}
-                    style={{ backgroundColor: 'transparent' }}
+                    style={{ backgroundColor: "transparent" }}
                   />
                 </>
               )}
               <button
                 type="button"
-                onClick={() => updateForm('isOnline', !form.isOnline)}
+                onClick={() => updateForm("isOnline", !form.isOnline)}
                 className="px-2 text-sm font-medium text-white/50 transition hover:text-white"
               >
-                {form.isOnline ? 'Meeting in person instead?' : 'Hosting it online instead?'}
+                {form.isOnline
+                  ? "Meeting in person instead?"
+                  : "Hosting it online instead?"}
               </button>
             </Section>
 
@@ -1859,7 +1998,7 @@ export const CreateExperience: React.FC = () => {
             <Section title="About the event">
               <RichTextEditor
                 value={form.description}
-                onChange={(html) => updateForm('description', html)}
+                onChange={(html) => updateForm("description", html)}
                 onLengthChange={setDescriptionTextLength}
                 placeholder="Describe what guests will experience..."
                 maxLength={2000}
@@ -1872,7 +2011,7 @@ export const CreateExperience: React.FC = () => {
 
             {/* More photos: shown after the poster on the event page */}
             <Section
-              title={`More photos${form.galleryPreviews.length ? ` · ${form.galleryPreviews.length}` : ''}`}
+              title={`More photos${form.galleryPreviews.length ? ` · ${form.galleryPreviews.length}` : ""}`}
               hint="Shown after the poster on the event page. Add, remove or re-crop to 4:5 here."
             >
               <GalleryUpload
@@ -1881,7 +2020,7 @@ export const CreateExperience: React.FC = () => {
                 onRemove={removeGalleryImage}
                 onRecrop={(i) => void recropGallery(i)}
                 recropping={
-                  loadingRecrop?.startsWith('gallery-')
+                  loadingRecrop?.startsWith("gallery-")
                     ? Number(loadingRecrop.slice(8))
                     : null
                 }
@@ -1896,93 +2035,107 @@ export const CreateExperience: React.FC = () => {
                     <NumberInput
                       value={form.maxGroupSize}
                       min={1}
-                      onChange={(v) => updateForm('maxGroupSize', v)}
+                      onChange={(v) => updateForm("maxGroupSize", v)}
                       ariaLabel="Slots"
                     />
                   </Row>
                 </Rows>
               )}
-              <Segmented<'paid' | 'free'>
-                value={form.isFree ? 'free' : 'paid'}
-                onChange={(v) => updateForm('isFree', v === 'free')}
+              <Segmented<"paid" | "free">
+                value={form.isFree ? "free" : "paid"}
+                onChange={(v) => updateForm("isFree", v === "free")}
                 options={[
-                  { value: 'paid', label: 'Paid' },
-                  { value: 'free', label: 'Free' },
+                  { value: "paid", label: "Paid" },
+                  { value: "free", label: "Free" },
                 ]}
               />
               {!form.isFree && (
                 <GuestPaymentCard
                   value={form}
-                  onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                  repeating={form.scheduleType !== 'one_time'}
+                  onChange={(patch) =>
+                    setForm((prev) => ({ ...prev, ...patch }))
+                  }
+                  repeating={form.scheduleType !== "one_time"}
                   showErrors={showErrors}
                 />
               )}
             </Section>
 
             {/* Everything optional, folded away */}
-            <Section title="More options" hint="All optional. Open one to change it.">
+            <Section
+              title="More options"
+              hint="All optional. Open one to change it."
+            >
               <div>
                 <MoreOptions
                   title="Who can book?"
-                  summary={whoCanBookLabel(form.isPrivate, form.privateAccessMode)}
+                  summary={whoCanBookLabel(
+                    form.isPrivate,
+                    form.privateAccessMode,
+                  )}
                   defaultOpen={form.isPrivate}
                 >
                   {/* Who can book: anyone = public; code = private + passkey gate;
                       approve = private + rsvp gate. Access only, never price. */}
-                  <Segmented<'anyone' | 'code' | 'approve'>
+                  <Segmented<"anyone" | "code" | "approve">
                     value={
                       !form.isPrivate
-                        ? 'anyone'
-                        : form.privateAccessMode === 'rsvp'
-                          ? 'approve'
-                          : 'code'
+                        ? "anyone"
+                        : form.privateAccessMode === "rsvp"
+                          ? "approve"
+                          : "code"
                     }
                     onChange={(v) =>
                       setForm((prev) => ({
                         ...prev,
-                        isPrivate: v !== 'anyone',
-                        ...(v !== 'anyone' && {
-                          privateAccessMode: v === 'approve' ? 'rsvp' : 'passkey',
+                        isPrivate: v !== "anyone",
+                        ...(v !== "anyone" && {
+                          privateAccessMode:
+                            v === "approve" ? "rsvp" : "passkey",
                         }),
                       }))
                     }
                     options={[
-                      { value: 'anyone', label: 'Anyone' },
-                      { value: 'code', label: 'People with a code' },
-                      { value: 'approve', label: 'People I approve' },
+                      { value: "anyone", label: "Anyone" },
+                      { value: "code", label: "People with a code" },
+                      { value: "approve", label: "People I approve" },
                     ]}
                   />
                   <p className="px-1 text-xs leading-5 text-white/45">
                     {!form.isPrivate
-                      ? 'Anyone on MySlotMate can find and book it.'
-                      : form.privateAccessMode === 'rsvp'
-                        ? 'Listed with a lock. Guests request to join; the host approves each one.'
-                        : 'Listed with a lock. Guests enter a code to book; they still pay the normal price.'}
+                      ? "Anyone on MySlotMate can find and book it."
+                      : form.privateAccessMode === "rsvp"
+                        ? "Listed with a lock. Guests request to join; the host approves each one."
+                        : "Listed with a lock. Guests enter a code to book; they still pay the normal price."}
                   </p>
                   {form.isPrivate && (
                     <div className="space-y-4">
-                      {form.privateAccessMode === 'rsvp' ? (
+                      {form.privateAccessMode === "rsvp" ? (
                         <div className="space-y-1.5 rounded-2xl border border-white/[0.06] bg-[#131328] px-4 py-3.5 text-sm text-white/70">
                           <p>
-                            Guests apply with their details and the host approves. Requests
-                            show in the host dashboard and in Join requests here.
+                            Guests apply with their details and the host
+                            approves. Requests show in the host dashboard and in
+                            Join requests here.
                           </p>
                           <p className="text-xs text-amber-300/90">
-                            Needs guest details: turn them on below and pick at least one field.
+                            Needs guest details: turn them on below and pick at
+                            least one field.
                           </p>
                         </div>
                       ) : (
                         <>
-                          <Segmented<'shared' | 'unique'>
+                          <Segmented<"shared" | "unique">
                             value={form.accessMode}
-                            onChange={(v) => updateForm('accessMode', v)}
+                            onChange={(v) => updateForm("accessMode", v)}
                             options={[
-                              { value: 'shared', label: 'One code for everyone' },
-                              { value: 'unique', label: 'Code per guest' },
+                              {
+                                value: "shared",
+                                label: "One code for everyone",
+                              },
+                              { value: "unique", label: "Code per guest" },
                             ]}
                           />
-                          {form.accessMode === 'shared' ? (
+                          {form.accessMode === "shared" ? (
                             <Rows>
                               <Row
                                 label="Code"
@@ -1991,7 +2144,9 @@ export const CreateExperience: React.FC = () => {
                                 <input
                                   type="text"
                                   value={form.accessPasskey}
-                                  onChange={(e) => updateForm('accessPasskey', e.target.value)}
+                                  onChange={(e) =>
+                                    updateForm("accessPasskey", e.target.value)
+                                  }
                                   placeholder="e.g. SUMMER24"
                                   className={ROW_INPUT}
                                 />
@@ -1999,8 +2154,11 @@ export const CreateExperience: React.FC = () => {
                                   type="button"
                                   onClick={() =>
                                     updateForm(
-                                      'accessPasskey',
-                                      Math.random().toString(36).slice(2, 8).toUpperCase(),
+                                      "accessPasskey",
+                                      Math.random()
+                                        .toString(36)
+                                        .slice(2, 8)
+                                        .toUpperCase(),
                                     )
                                   }
                                   className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/15"
@@ -2009,14 +2167,25 @@ export const CreateExperience: React.FC = () => {
                                 </button>
                               </Row>
                             </Rows>
+                          ) : isEdit && editEventId && selectedHost?.id ? (
+                            <CodesPanel
+                              mode="access"
+                              eventId={editEventId}
+                              hostId={selectedHost.id}
+                              isFree={form.isFree}
+                              codeGated
+                            />
                           ) : (
                             <p className="px-1 text-sm text-white/60">
-                              Each guest gets a single-use code that unlocks booking.{' '}
-                              {isEdit
-                                ? 'Make them in Codes below.'
-                                : 'Save the experience first, then generate them here.'}
+                              Each guest gets a single-use code that unlocks
+                              booking. Save the experience first, then make them
+                              here.
                             </p>
                           )}
+                          <p className="px-1 text-xs text-white/45">
+                            These codes only let guests in; they pay the normal
+                            price. For % off or free codes, use Codes below.
+                          </p>
                         </>
                       )}
                     </div>
@@ -2026,8 +2195,9 @@ export const CreateExperience: React.FC = () => {
                 <MoreOptions
                   title="Refunds"
                   summary={
-                    CANCELLATION_POLICIES.find((p) => p.value === form.cancellationPolicy)
-                      ?.label ?? ''
+                    CANCELLATION_POLICIES.find(
+                      (p) => p.value === form.cancellationPolicy,
+                    )?.label ?? ""
                   }
                 >
                   <Rows>
@@ -2037,21 +2207,29 @@ export const CreateExperience: React.FC = () => {
                         <button
                           key={p.value}
                           type="button"
-                          onClick={() => updateForm('cancellationPolicy', p.value)}
+                          onClick={() =>
+                            updateForm("cancellationPolicy", p.value)
+                          }
                           className="flex min-h-[56px] w-full items-center gap-3 py-2.5 text-left"
                         >
                           <span
                             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                              on ? 'border-[#B57BFF]' : 'border-white/25'
+                              on ? "border-[#B57BFF]" : "border-white/25"
                             }`}
                           >
-                            {on && <span className={`h-2.5 w-2.5 rounded-full ${GRADIENT}`} />}
+                            {on && (
+                              <span
+                                className={`h-2.5 w-2.5 rounded-full ${GRADIENT}`}
+                              />
+                            )}
                           </span>
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-white">
                               {p.label}
                             </span>
-                            <span className="block text-xs text-white/45">{p.description}</span>
+                            <span className="block text-xs text-white/45">
+                              {p.description}
+                            </span>
                           </span>
                         </button>
                       );
@@ -2059,21 +2237,14 @@ export const CreateExperience: React.FC = () => {
                   </Rows>
                 </MoreOptions>
 
-                
-
                 {isEdit && editEventId && selectedHost?.id && (
-                  <MoreOptions title="Codes" summary="Unlock, % off or free">
+                  <MoreOptions title="Codes" summary="% off or free">
                     <CodesPanel
                       eventId={editEventId}
                       hostId={selectedHost.id}
                       isFree={form.isFree}
-                      codeGated={form.isPrivate && form.privateAccessMode === 'passkey'}
-                      sharedPasskey={
-                        form.isPrivate &&
-                        form.privateAccessMode === 'passkey' &&
-                        form.accessMode === 'shared'
-                          ? form.accessPasskey
-                          : ''
+                      codeGated={
+                        form.isPrivate && form.privateAccessMode === "passkey"
                       }
                     />
                   </MoreOptions>
@@ -2089,7 +2260,7 @@ export const CreateExperience: React.FC = () => {
                         <NumberInput
                           value={form.minGroupSize}
                           min={1}
-                          onChange={(v) => updateForm('minGroupSize', v)}
+                          onChange={(v) => updateForm("minGroupSize", v)}
                           ariaLabel="Minimum guests"
                         />
                       </Row>
@@ -2097,20 +2268,24 @@ export const CreateExperience: React.FC = () => {
                         <NumberInput
                           value={form.maxGroupSize}
                           min={Math.max(1, form.minGroupSize)}
-                          onChange={(v) => updateForm('maxGroupSize', v)}
+                          onChange={(v) => updateForm("maxGroupSize", v)}
                           ariaLabel="Maximum guests"
                         />
                       </Row>
                     </Rows>
-                    {(isOneOnOne || form.scheduleType !== 'custom_dates') &&
+                    {(isOneOnOne || form.scheduleType !== "custom_dates") &&
                       !(form.eventTime && form.endTime) && (
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="mr-1 text-sm text-white/55">Lasts</span>
+                          <span className="mr-1 text-sm text-white/55">
+                            Lasts
+                          </span>
                           {DURATION_OPTIONS.map((mins) => (
                             <Chip
                               key={mins}
                               active={form.durationMinutes === mins}
-                              onClick={() => updateForm('durationMinutes', mins)}
+                              onClick={() =>
+                                updateForm("durationMinutes", mins)
+                              }
                             >
                               {minsLabel(mins)}
                             </Chip>
@@ -2122,12 +2297,16 @@ export const CreateExperience: React.FC = () => {
 
                 <MoreOptions
                   title="Languages & level"
-                  summary={[form.languages.join(', '), form.level].filter(Boolean).join(' · ')}
+                  summary={[form.languages.join(", "), form.level]
+                    .filter(Boolean)
+                    .join(" · ")}
                 >
                   <div className="flex flex-wrap gap-2">
                     {[
                       ...LANGUAGE_OPTIONS,
-                      ...form.languages.filter((l) => !LANGUAGE_OPTIONS.includes(l)),
+                      ...form.languages.filter(
+                        (l) => !LANGUAGE_OPTIONS.includes(l),
+                      ),
                     ].map((lang) => (
                       <Chip
                         key={lang}
@@ -2144,7 +2323,7 @@ export const CreateExperience: React.FC = () => {
                       value={customLanguage}
                       onChange={(e) => setCustomLanguage(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           e.preventDefault();
                           addCustomLanguage();
                         }
@@ -2165,7 +2344,9 @@ export const CreateExperience: React.FC = () => {
                       <Chip
                         key={lvl}
                         active={form.level === lvl}
-                        onClick={() => updateForm('level', form.level === lvl ? '' : lvl)}
+                        onClick={() =>
+                          updateForm("level", form.level === lvl ? "" : lvl)
+                        }
                       >
                         {lvl}
                       </Chip>
@@ -2177,13 +2358,13 @@ export const CreateExperience: React.FC = () => {
                   title="Guest details at booking"
                   summary={
                     form.requiresAttendeeDetails
-                      ? `${form.attendeeFields.length} field${form.attendeeFields.length === 1 ? '' : 's'} required`
-                      : 'Off'
+                      ? `${form.attendeeFields.length} field${form.attendeeFields.length === 1 ? "" : "s"} required`
+                      : "Off"
                   }
                   defaultOpen={
                     showErrors &&
                     form.isPrivate &&
-                    form.privateAccessMode === 'rsvp' &&
+                    form.privateAccessMode === "rsvp" &&
                     form.attendeeFields.length === 0
                   }
                 >
@@ -2191,7 +2372,9 @@ export const CreateExperience: React.FC = () => {
                     label="Ask each guest for details"
                     hint="Selected fields are required at booking."
                     checked={form.requiresAttendeeDetails}
-                    onChange={(next) => updateForm('requiresAttendeeDetails', next)}
+                    onChange={(next) =>
+                      updateForm("requiresAttendeeDetails", next)
+                    }
                   />
                   {form.requiresAttendeeDetails && (
                     <div className="flex flex-wrap gap-2">
@@ -2203,9 +2386,11 @@ export const CreateExperience: React.FC = () => {
                             active={on}
                             onClick={() =>
                               updateForm(
-                                'attendeeFields',
+                                "attendeeFields",
                                 on
-                                  ? form.attendeeFields.filter((k) => k !== f.key)
+                                  ? form.attendeeFields.filter(
+                                      (k) => k !== f.key,
+                                    )
                                   : [...form.attendeeFields, f.key],
                               )
                             }
@@ -2220,18 +2405,18 @@ export const CreateExperience: React.FC = () => {
 
                 <MoreOptions
                   title="Terms on the ticket"
-                  summary={form.termsAndConditions.trim() ? 'Added' : 'None'}
+                  summary={form.termsAndConditions.trim() ? "Added" : "None"}
                 >
                   <textarea
                     value={form.termsAndConditions}
                     onChange={(e) => {
                       if (e.target.value.length <= 2000)
-                        updateForm('termsAndConditions', e.target.value);
+                        updateForm("termsAndConditions", e.target.value);
                     }}
                     maxLength={2000}
                     rows={5}
                     placeholder={
-                      'Printed on the guest’s ticket PDF, e.g.\n• Carry a valid photo ID.\n• Arrive 15 minutes early.'
+                      "Printed on the guest’s ticket PDF, e.g.\n• Carry a valid photo ID.\n• Arrive 15 minutes early."
                     }
                     className={`${FIELD} resize-y`}
                   />
@@ -2244,25 +2429,29 @@ export const CreateExperience: React.FC = () => {
                   <MoreOptions
                     title="Page link"
                     summary={`/experience/${form.slug}`}
-                    defaultOpen={slugStatus === 'taken' || slugStatus === 'invalid'}
+                    defaultOpen={
+                      slugStatus === "taken" || slugStatus === "invalid"
+                    }
                   >
                     <Rows>
                       <Row
                         label="myslotmate.com/experience/"
-                        error={slugStatus === 'taken' || slugStatus === 'invalid'}
+                        error={
+                          slugStatus === "taken" || slugStatus === "invalid"
+                        }
                       >
                         <input
                           type="text"
                           value={form.slug}
                           onChange={(e) =>
                             updateForm(
-                              'slug',
+                              "slug",
                               // Lenient while typing (keep a trailing hyphen so
                               // word boundaries work); the server slugifies again.
                               e.target.value
                                 .toLowerCase()
-                                .replace(/[^a-z0-9]+/g, '-')
-                                .replace(/^-+/, ''),
+                                .replace(/[^a-z0-9]+/g, "-")
+                                .replace(/^-+/, ""),
                             )
                           }
                           placeholder="sunset-yoga"
@@ -2273,24 +2462,25 @@ export const CreateExperience: React.FC = () => {
                     </Rows>
                     <p
                       className={`px-1 text-xs ${
-                        slugStatus === 'taken' || slugStatus === 'invalid'
-                          ? 'text-red-400'
-                          : slugStatus === 'available'
-                            ? 'text-emerald-300'
-                            : 'text-white/45'
+                        slugStatus === "taken" || slugStatus === "invalid"
+                          ? "text-red-400"
+                          : slugStatus === "available"
+                            ? "text-emerald-300"
+                            : "text-white/45"
                       }`}
                     >
-                      {slugStatus === 'checking'
-                        ? 'Checking…'
-                        : slugStatus === 'available'
-                          ? 'Available.'
-                          : slugStatus === 'taken'
-                            ? 'Already in use — pick another.'
-                            : slugStatus === 'invalid'
-                              ? 'A link is required.'
-                              : ''}{' '}
+                      {slugStatus === "checking"
+                        ? "Checking…"
+                        : slugStatus === "available"
+                          ? "Available."
+                          : slugStatus === "taken"
+                            ? "Already in use — pick another."
+                            : slugStatus === "invalid"
+                              ? "A link is required."
+                              : ""}{" "}
                       <span className="text-white/40">
-                        Changing it changes the public URL; the old id link keeps working.
+                        Changing it changes the public URL; the old id link
+                        keeps working.
                       </span>
                     </p>
                   </MoreOptions>
@@ -2302,12 +2492,15 @@ export const CreateExperience: React.FC = () => {
                   </MoreOptions>
                 )}
 
-                {isEdit && eventStatus !== 'cancelled' && (
-                  <MoreOptions title="Cancel experience" summary="Refunds guests">
+                {isEdit && eventStatus !== "cancelled" && (
+                  <MoreOptions
+                    title="Cancel experience"
+                    summary="Refunds guests"
+                  >
                     <p className="text-sm text-white/55">
-                      Cancels every upcoming session and refunds each active booking to the
-                      guest&rsquo;s wallet. Sessions that already happened are left as they are.
-                      This can&rsquo;t be undone.
+                      Cancels every upcoming session and refunds each active
+                      booking to the guest&rsquo;s wallet. Sessions that already
+                      happened are left as they are. This can&rsquo;t be undone.
                     </p>
                     <button
                       type="button"
@@ -2315,7 +2508,8 @@ export const CreateExperience: React.FC = () => {
                       onClick={() => void handleCancelEvent()}
                       className="flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-500/[0.08] px-5 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/[0.14] disabled:opacity-50"
                     >
-                      <FiSlash size={16} /> {cancelling ? 'Cancelling…' : 'Cancel and refund guests'}
+                      <FiSlash size={16} />{" "}
+                      {cancelling ? "Cancelling…" : "Cancel and refund guests"}
                     </button>
                   </MoreOptions>
                 )}
@@ -2323,8 +2517,8 @@ export const CreateExperience: React.FC = () => {
                 {isEdit && (
                   <MoreOptions title="Delete experience" summary="">
                     <p className="text-sm text-white/55">
-                      Removes this experience for good. Blocked while it still has active
-                      bookings — cancel or pause it first.
+                      Removes this experience for good. Blocked while it still
+                      has active bookings — cancel or pause it first.
                     </p>
                     <button
                       type="button"
@@ -2347,7 +2541,7 @@ export const CreateExperience: React.FC = () => {
                     disabled={isSubmitting}
                     className="shrink-0 rounded-full px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
                   >
-                    {submitType === 'draft' ? 'Saving…' : 'Save draft'}
+                    {submitType === "draft" ? "Saving…" : "Save draft"}
                   </button>
                 ) : (
                   <a
@@ -2365,11 +2559,11 @@ export const CreateExperience: React.FC = () => {
                   className={`flex flex-1 items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 ${GRADIENT}`}
                 >
                   <FiCheck size={18} />
-                  {submitType === 'publish'
-                    ? 'Saving…'
+                  {submitType === "publish"
+                    ? "Saving…"
                     : isEdit && !isDraftEvent
-                      ? 'Save changes'
-                      : 'Publish event'}
+                      ? "Save changes"
+                      : "Publish event"}
                 </button>
               </div>
             </div>
@@ -2384,9 +2578,12 @@ export const CreateExperience: React.FC = () => {
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15">
               <FiTrash2 className="text-red-300" size={22} />
             </div>
-            <h2 className="font-outfit mb-2 text-xl font-bold text-white">Delete this experience?</h2>
+            <h2 className="font-outfit mb-2 text-xl font-bold text-white">
+              Delete this experience?
+            </h2>
             <p className="mb-6 text-sm leading-6 text-white/55">
-              “{form.title || 'Untitled'}” is removed for good. This can’t be undone.
+              “{form.title || "Untitled"}” is removed for good. This can’t be
+              undone.
             </p>
             <div className="flex gap-3">
               <button
@@ -2400,7 +2597,7 @@ export const CreateExperience: React.FC = () => {
                 disabled={deleting}
                 className="flex-1 rounded-full bg-red-600 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting ? 'Deleting…' : 'Delete'}
+                {deleting ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>
