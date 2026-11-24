@@ -1839,3 +1839,99 @@ body {
 .msm-dark .focus\:ring-brand-500\/10:focus { --tw-ring-color: rgb(181 123 253 / 0.35); }
 .msm-dark .focus\:ring-brand-400:focus { --tw-ring-color: rgb(181 123 253 / 0.35); }
 .msm-dark .focus\:bg-white:focus { background-color: #121426; }
+
+/* Event marketing editor: the admin rich-text editor and view drawn on the
+   dark landing-page canvas, so editing looks like the live page. */
+/* Body font and description styles match the live event page
+   (ExperienceDetailClient.tsx in the website). */
+.lp-canvas {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+.lp-canvas .rich-text-content {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
+  line-height: 1.75rem;
+}
+.lp-canvas .rich-text-content * {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+.lp-canvas .rich-text-content h1,
+.lp-canvas .rich-text-content h2,
+.lp-canvas .rich-text-content h3,
+.lp-canvas .rich-text-content strong {
+  color: #fff !important;
+}
+.lp-canvas .rich-text-content h1,
+.lp-canvas .rich-text-content h2 {
+  margin-top: 1.25rem;
+  font-weight: 600;
+}
+.lp-canvas .rich-text-content h3 {
+  margin-top: 1rem;
+  font-weight: 600;
+}
+.lp-canvas .rich-text-content p {
+  margin-top: 0.5rem;
+}
+.lp-canvas .rich-text-content li {
+  margin-top: 0.25rem;
+}
+.lp-canvas .rich-text-content ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.lp-canvas .rich-text-content ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.lp-canvas .rich-text-content a {
+  color: #b57bff !important;
+}
+.lp-canvas .lp-editor {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+.lp-canvas .lp-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: rgba(255, 255, 255, 0.35);
+}
+.lp-inline {
+  background: transparent;
+  border-radius: 0.5rem;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  color: inherit;
+}
+.lp-inline:hover {
+  outline-color: rgba(255, 255, 255, 0.25);
+}
+.lp-inline:focus {
+  outline-color: rgba(255, 255, 255, 0.6);
+}
+.lp-inline::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+.lp-inline-dark:hover {
+  outline-color: rgba(8, 9, 20, 0.25);
+}
+.lp-inline-dark:focus {
+  outline-color: rgba(8, 9, 20, 0.5);
+}
+.lp-inline-dark::placeholder {
+  color: rgba(8, 9, 20, 0.4);
+}
+/* Event-marketing canvas: text shows as on the live page; a faint outline on
+   hover hints that a double-click edits it. */
+.lp-editable {
+  cursor: text;
+  border-radius: 0.5rem;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  transition: outline-color 0.15s;
+}
+.lp-editable:hover {
+  outline-color: rgba(255, 255, 255, 0.25);
+}
+.lp-editable-dark:hover {
+  outline-color: rgba(8, 9, 20, 0.25);
+}

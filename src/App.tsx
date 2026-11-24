@@ -21,6 +21,7 @@ import { CitiesDirectory } from './modules/cities/CitiesDirectory';
 import { ReviewsDirectory } from './modules/reviews/ReviewsDirectory';
 import { ReportsDirectory } from './modules/reports/ReportsDirectory';
 import { BlogsDirectory } from './modules/blogs/BlogsDirectory';
+import { LandingPagesDirectory } from './modules/landing-pages/LandingPagesDirectory';
 import { MarketingDirectory } from './modules/marketing/MarketingDirectory';
 import { NotificationsComposer } from './modules/notifications/NotificationsComposer';
 import { BillingPage } from './modules/billing/BillingPage';
@@ -44,7 +45,10 @@ const AnonymousRoute: React.FC<RouteProps> = ({ children }) => {
 
 const AppContent: React.FC = () => {
   const [globalSearch, setGlobalSearch] = useState('');
-  const { initializing } = useAuth();
+  const { initializing, user } = useAuth();
+  // The marketing login (role "marketing") only gets the Event marketing
+  // section; the backend refuses it everywhere else, and any 401 logs out.
+  const isMarketing = user?.role === 'marketing';
 
   // Avoid redirecting a valid session to /login before the persisted token
   // has been validated against the backend.
@@ -77,7 +81,7 @@ const AppContent: React.FC = () => {
         path="/experiences/new"
         element={
           <ProtectedRoute>
-            <CreateExperience />
+            {isMarketing ? <Navigate to="/event-marketing" replace /> : <CreateExperience />}
           </ProtectedRoute>
         }
       />
@@ -85,7 +89,7 @@ const AppContent: React.FC = () => {
         path="/experiences/:id/edit"
         element={
           <ProtectedRoute>
-            <CreateExperience />
+            {isMarketing ? <Navigate to="/event-marketing" replace /> : <CreateExperience />}
           </ProtectedRoute>
         }
       />
@@ -96,6 +100,12 @@ const AppContent: React.FC = () => {
         element={
           <ProtectedRoute>
             <Layout globalSearch={globalSearch} onSearchChange={setGlobalSearch}>
+              {isMarketing ? (
+                <Routes>
+                  <Route path="/event-marketing" element={<LandingPagesDirectory />} />
+                  <Route path="*" element={<Navigate to="/event-marketing" replace />} />
+                </Routes>
+              ) : (
               <Routes>
                 <Route path="/" element={<Overview />} />
                 <Route path="/users" element={<UsersDirectory searchQuery={globalSearch} />} />
@@ -113,12 +123,14 @@ const AppContent: React.FC = () => {
                 <Route path="/reviews" element={<ReviewsDirectory />} />
                 <Route path="/reports" element={<ReportsDirectory />} />
                 <Route path="/blogs" element={<BlogsDirectory />} />
+                <Route path="/event-marketing" element={<LandingPagesDirectory />} />
                 <Route path="/marketing" element={<MarketingDirectory />} />
                 <Route path="/notifications" element={<NotificationsComposer />} />
                 <Route path="/settings" element={<SettingsManager />} />
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              )}
             </Layout>
           </ProtectedRoute>
         }

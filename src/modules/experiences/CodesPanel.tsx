@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { toast } from '../../lib/toast';
-import { FiChevronDown, FiCopy, FiDownload, FiTrash2 } from 'react-icons/fi';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "../../lib/toast";
+import { FiChevronDown, FiCopy, FiDownload, FiTrash2 } from "react-icons/fi";
 import {
   createCoupon,
   createCouponsBatch,
@@ -8,41 +8,43 @@ import {
   listHostCoupons,
   updateCoupon,
   type Coupon as CouponDTO,
-} from '../../api/coupons';
+} from "../../api/coupons";
 
 /** What a code does when a guest enters it. Every kind also unlocks a
  *  private-with-code experience. */
-type CodeEffect = 'unlock' | 'percent' | 'free';
+type CodeEffect = "unlock" | "percent" | "free";
 
 function codeEffectOf(c: CouponDTO): CodeEffect {
-  if (c.discount_percent != null) return 'percent';
-  return c.grants_free ? 'free' : 'unlock';
+  if (c.discount_percent != null) return "percent";
+  return c.grants_free ? "free" : "unlock";
 }
 
 function codeEffectLabel(c: CouponDTO): string {
   const e = codeEffectOf(c);
-  if (e === 'percent') return `${c.discount_percent}% off`;
-  if (e === 'free') return 'Free';
-  return 'Unlocks';
+  if (e === "percent") return `${c.discount_percent}% off`;
+  if (e === "free") return "Free";
+  return "Unlocks";
 }
 
 const genCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 
 // Date inputs give "YYYY-MM-DD"; a code starts at the start of that day and
 // lasts to the end of its last day, in the host's own time zone.
-const startOfDay = (d: string) => (d ? new Date(`${d}T00:00:00`).toISOString() : null);
-const endOfDay = (d: string) => (d ? new Date(`${d}T23:59:59`).toISOString() : null);
+const startOfDay = (d: string) =>
+  d ? new Date(`${d}T00:00:00`).toISOString() : null;
+const endOfDay = (d: string) =>
+  d ? new Date(`${d}T23:59:59`).toISOString() : null;
 const shortDate = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
+    ? new Date(iso).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
       })
-    : '';
+    : "";
 
 function usedLabel(c: CouponDTO): string {
-  if (c.max_redemptions === 1) return c.times_redeemed > 0 ? 'Used' : 'Unused';
-  return `${c.times_redeemed} / ${c.max_redemptions ?? '∞'}`;
+  if (c.max_redemptions === 1) return c.times_redeemed > 0 ? "Used" : "Unused";
+  return `${c.times_redeemed} / ${c.max_redemptions ?? "∞"}`;
 }
 
 function validLabel(c: CouponDTO): string {
@@ -50,24 +52,24 @@ function validLabel(c: CouponDTO): string {
     return `${shortDate(c.valid_from)} – ${shortDate(c.valid_until)}`;
   if (c.valid_until) return `Till ${shortDate(c.valid_until)}`;
   if (c.valid_from) return `From ${shortDate(c.valid_from)}`;
-  return 'Always';
+  return "Always";
 }
 
 function codesToCsv(rows: CouponDTO[]): string {
-  const header = ['code', 'does', 'scope', 'used', 'status', 'valid'];
+  const header = ["code", "does", "scope", "used", "status", "valid"];
   const body = rows.map((c) =>
     [
       c.code,
       codeEffectLabel(c),
-      c.event_id === null ? 'all_experiences' : 'this_experience',
+      c.event_id === null ? "all_experiences" : "this_experience",
       usedLabel(c),
-      c.is_active ? 'active' : 'paused',
+      c.is_active ? "active" : "paused",
       validLabel(c),
     ]
       .map((v) => (/[",]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v))
-      .join(','),
+      .join(","),
   );
-  return [header.join(','), ...body].join('\n');
+  return [header.join(","), ...body].join("\n");
 }
 
 interface Props {
@@ -84,24 +86,24 @@ interface Props {
 
 const EFFECTS: { key: CodeEffect; title: string; desc: string }[] = [
   {
-    key: 'unlock',
-    title: 'Unlock only',
-    desc: 'Lets the guest book. They pay the normal price.',
+    key: "unlock",
+    title: "Unlock only",
+    desc: "Lets the guest book. They pay the normal price.",
   },
   {
-    key: 'percent',
-    title: '% off',
-    desc: 'Takes a share off the tickets. You absorb it.',
+    key: "percent",
+    title: "% off",
+    desc: "Takes a share off the tickets. You absorb it.",
   },
   {
-    key: 'free',
-    title: 'Free',
-    desc: 'Books at ₹0. You comp the guest.',
+    key: "free",
+    title: "Free",
+    desc: "Books at ₹0. You comp the guest.",
   },
 ];
 
 const input =
-  'rounded-lg border border-white/15 bg-[#0e1020] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-[#7B2FFF]';
+  "rounded-lg border border-white/15 bg-[#0e1020] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-[#7B2FFF]";
 
 function Choice({
   active,
@@ -122,8 +124,8 @@ function Choice({
       onClick={onClick}
       className={`rounded-lg border p-3 text-left transition ${
         active
-          ? 'border-[#7B2FFF] bg-[#7B2FFF]/10 ring-1 ring-[#7B2FFF]'
-          : 'border-white/10 bg-[#0e1020] hover:border-white/15'
+          ? "border-[#7B2FFF] bg-[#7B2FFF]/10 ring-1 ring-[#7B2FFF]"
+          : "border-white/10 bg-[#0e1020] hover:border-white/15"
       }`}
     >
       <span className="block text-sm font-medium text-white">{title}</span>
@@ -136,9 +138,15 @@ function Choice({
 // what it does (unlock only, % off, free), how it is handed out (one shared
 // code or unique codes per guest), how often it can be used and when it is
 // valid. All three kinds are rows in the same coupons table.
-export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedPasskey }: Props) {
+export default function CodesPanel({
+  eventId,
+  hostId,
+  isFree,
+  codeGated,
+  sharedPasskey,
+}: Props) {
   const effects = useMemo(
-    () => EFFECTS.filter((e) => (e.key === 'unlock' ? codeGated : !isFree)),
+    () => EFFECTS.filter((e) => (e.key === "unlock" ? codeGated : !isFree)),
     [codeGated, isFree],
   );
 
@@ -146,16 +154,18 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
   const [loading, setLoading] = useState(true);
   const [listOpen, setListOpen] = useState(false);
 
-  const [picked, setEffect] = useState<CodeEffect>(codeGated ? 'unlock' : 'percent');
-  const [percent, setPercent] = useState('10');
-  const [handout, setHandout] = useState<'shared' | 'unique'>('shared');
-  const [code, setCode] = useState('');
-  const [totalUses, setTotalUses] = useState('');
-  const [perGuest, setPerGuest] = useState('1');
-  const [count, setCount] = useState('10');
-  const [prefix, setPrefix] = useState('');
-  const [from, setFrom] = useState('');
-  const [until, setUntil] = useState('');
+  const [picked, setEffect] = useState<CodeEffect>(
+    codeGated ? "unlock" : "percent",
+  );
+  const [percent, setPercent] = useState("10");
+  const [handout, setHandout] = useState<"shared" | "unique">("shared");
+  const [code, setCode] = useState("");
+  const [totalUses, setTotalUses] = useState("");
+  const [perGuest, setPerGuest] = useState("1");
+  const [count, setCount] = useState("10");
+  const [prefix, setPrefix] = useState("");
+  const [from, setFrom] = useState("");
+  const [until, setUntil] = useState("");
   const [saving, setSaving] = useState(false);
   const [lastBatch, setLastBatch] = useState<CouponDTO[]>([]);
   // The picked effect, or the first one available if settings changed.
@@ -166,9 +176,11 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
   const load = useCallback(async () => {
     try {
       const res = await listHostCoupons(hostId);
-      setCodes(res.filter((c) => c.event_id === eventId || c.event_id === null));
+      setCodes(
+        res.filter((c) => c.event_id === eventId || c.event_id === null),
+      );
     } catch {
-      toast.error('Could not load codes');
+      toast.error("Could not load codes");
     } finally {
       setLoading(false);
     }
@@ -187,56 +199,59 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
   };
 
   const effectWords =
-    effect === 'free'
-      ? 'books this experience for ₹0'
-      : effect === 'percent'
-        ? `takes ${pctOk ? pct : '?'}% off the tickets`
-        : 'lets a guest book at the normal price';
+    effect === "free"
+      ? "books this experience for ₹0"
+      : effect === "percent"
+        ? `takes ${pctOk ? pct : "?"}% off the tickets`
+        : "lets a guest book at the normal price";
 
   const kindFields = {
-    grants_free: effect === 'free',
-    discount_percent: effect === 'percent' ? pct : null,
+    grants_free: effect === "free",
+    discount_percent: effect === "percent" ? pct : null,
   };
 
   const create = async () => {
-    if (effect === 'percent' && !pctOk) {
-      toast.error('Discount must be a whole number from 1 to 99');
+    if (effect === "percent" && !pctOk) {
+      toast.error("Discount must be a whole number from 1 to 99");
       return;
     }
     if (from && until && from > until) {
-      toast.error('The start date is after the end date');
+      toast.error("The start date is after the end date");
       return;
     }
-    if (handout === 'shared') {
+    if (handout === "shared") {
       if (!code.trim()) {
-        toast.error('Enter the code guests will type');
+        toast.error("Enter the code guests will type");
         return;
       }
       if (!posIntOrBlank(totalUses) || !posIntOrBlank(perGuest)) {
-        toast.error('Uses must be whole numbers of at least 1, or blank');
+        toast.error("Uses must be whole numbers of at least 1, or blank");
+        return;
+      }
+      // A shared free code books for ₹0, so it must have a cap.
+      if (effect === "free" && !totalUses.trim()) {
+        toast.error("Set total uses for a shared free code");
         return;
       }
     } else {
       const n = Number(count);
       if (!Number.isInteger(n) || n < 1 || n > 500) {
-        toast.error('Make between 1 and 500 codes at a time');
+        toast.error("Make between 1 and 500 codes at a time");
         return;
       }
     }
-    if (effect === 'free') {
-      const n = handout === 'shared' ? null : Number(count);
+    if (effect === "free") {
+      const n = handout === "shared" ? null : Number(count);
       const msg =
-        handout === 'shared'
-          ? `Create ${code.trim().toUpperCase()}? Every guest who enters it books for ₹0${
-              totalUses.trim() ? `, up to ${totalUses} bookings` : ''
-            }.`
-          : `Create ${n} free code${n! > 1 ? 's' : ''}? Each one books one guest for ₹0.`;
+        handout === "shared"
+          ? `Create ${code.trim().toUpperCase()}? Every guest who enters it books for ₹0, up to ${totalUses} bookings.`
+          : `Create ${n} free code${n! > 1 ? "s" : ""}? Each one books one guest for ₹0.`;
       if (!window.confirm(msg)) return;
     }
 
     setSaving(true);
     try {
-      if (handout === 'shared') {
+      if (handout === "shared") {
         await createCoupon({
           host_id: hostId,
           event_id: eventId,
@@ -248,9 +263,9 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
           valid_until: endOfDay(until),
           is_active: true,
         });
-        toast.success('Code created');
-        setCode('');
-        setTotalUses('');
+        toast.success("Code created");
+        setCode("");
+        setTotalUses("");
         setLastBatch([]);
       } else {
         const res = await createCouponsBatch({
@@ -268,7 +283,7 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
       setListOpen(true);
       void load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create the code');
+      toast.error(e instanceof Error ? e.message : "Could not create the code");
     } finally {
       setSaving(false);
     }
@@ -284,7 +299,7 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
       });
       void load();
     } catch {
-      toast.error('Could not update the code');
+      toast.error("Could not update the code");
     }
   };
 
@@ -296,14 +311,17 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
     if (!window.confirm(msg)) return;
     try {
       await deleteCoupon(c.id, hostId);
-      toast.success('Code deleted');
+      toast.success("Code deleted");
       void load();
     } catch {
-      toast.error('Could not delete the code');
+      toast.error("Could not delete the code");
     }
   };
 
-  const own = useMemo(() => codes.filter((c) => c.event_id === eventId), [codes, eventId]);
+  const own = useMemo(
+    () => codes.filter((c) => c.event_id === eventId),
+    [codes, eventId],
+  );
 
   const removeAll = async () => {
     if (own.length === 0) return;
@@ -315,11 +333,11 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
       return;
     try {
       await Promise.all(own.map((c) => deleteCoupon(c.id, hostId)));
-      toast.success('Codes deleted');
+      toast.success("Codes deleted");
       setLastBatch([]);
       void load();
     } catch {
-      toast.error('Could not delete every code');
+      toast.error("Could not delete every code");
       void load();
     }
   };
@@ -327,10 +345,10 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
   const download = (rows: CouponDTO[], name: string) => {
     if (rows.length === 0) return;
     const blob = new Blob([codesToCsv(rows)], {
-      type: 'text/csv;charset=utf-8',
+      type: "text/csv;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = name;
     a.click();
@@ -340,13 +358,14 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
   if (effects.length === 0) {
     return (
       <p className="text-sm text-[#A5A8C3]">
-        This experience is free and anyone can book it, so there is nothing for a code to do. Codes
-        work when the experience is paid, or when only people with a code can book.
+        This experience is free and anyone can book it, so there is nothing for
+        a code to do. Codes work when the experience is paid, or when only
+        people with a code can book.
       </p>
     );
   }
 
-  const passkey = sharedPasskey?.trim() ?? '';
+  const passkey = sharedPasskey?.trim() ?? "";
   const total = codes.length + (passkey ? 1 : 0);
 
   return (
@@ -354,9 +373,11 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
       {/* Create */}
       <div className="space-y-4 rounded-xl border border-white/10 bg-[#121426] p-4">
         <div>
-          <p className="mb-2 text-sm font-medium text-white">What does the code do?</p>
+          <p className="mb-2 text-sm font-medium text-white">
+            What does the code do?
+          </p>
           <div
-            className={`grid gap-2 ${effects.length === 3 ? 'sm:grid-cols-3' : effects.length === 2 ? 'sm:grid-cols-2' : ''}`}
+            className={`grid gap-2 ${effects.length === 3 ? "sm:grid-cols-3" : effects.length === 2 ? "sm:grid-cols-2" : ""}`}
             role="radiogroup"
             aria-label="What does the code do?"
           >
@@ -370,7 +391,7 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
               />
             ))}
           </div>
-          {effect === 'percent' && (
+          {effect === "percent" && (
             <label className="mt-3 flex items-center gap-2 text-sm text-white/80">
               Discount
               <input
@@ -385,7 +406,7 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
               % off
             </label>
           )}
-          {codeGated && effect !== 'unlock' && (
+          {codeGated && effect !== "unlock" && (
             <p className="mt-2 text-xs text-[#A5A8C3]">
               It also lets the guest book this experience.
             </p>
@@ -393,31 +414,35 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-medium text-white">How do you hand it out?</p>
+          <p className="mb-2 text-sm font-medium text-white">
+            How do you hand it out?
+          </p>
           <div
             className="grid gap-2 sm:grid-cols-2"
             role="radiogroup"
             aria-label="How do you hand it out?"
           >
             <Choice
-              active={handout === 'shared'}
+              active={handout === "shared"}
               title="One code to share"
               desc="The same code for everyone you send it to."
-              onClick={() => setHandout('shared')}
+              onClick={() => setHandout("shared")}
             />
             <Choice
-              active={handout === 'unique'}
+              active={handout === "unique"}
               title="A code per guest"
               desc="Unique codes, each used once."
-              onClick={() => setHandout('unique')}
+              onClick={() => setHandout("unique")}
             />
           </div>
         </div>
 
-        {handout === 'shared' ? (
+        {handout === "shared" ? (
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">Code</label>
+              <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">
+                Code
+              </label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -437,13 +462,15 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">Total uses</label>
+                <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">
+                  Total uses
+                </label>
                 <input
                   type="number"
                   min={1}
                   value={totalUses}
                   onChange={(e) => setTotalUses(e.target.value)}
-                  placeholder="No limit"
+                  placeholder={effect === "free" ? "Required" : "No limit"}
                   className={`${input} w-full`}
                 />
               </div>
@@ -465,7 +492,9 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">How many</label>
+              <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">
+                How many
+              </label>
               <input
                 type="number"
                 min={1}
@@ -523,23 +552,28 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
             className="rounded-lg bg-[#7B2FFF] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#6A22E0] disabled:opacity-50"
           >
             {saving
-              ? 'Creating…'
-              : handout === 'shared'
-                ? 'Create code'
-                : `Create ${Number(count) > 0 ? count : ''} codes`}
+              ? "Creating…"
+              : handout === "shared"
+                ? "Create code"
+                : `Create ${Number(count) > 0 ? count : ""} codes`}
           </button>
-          <span className={`text-xs ${effect === 'free' ? 'text-amber-300' : 'text-[#A5A8C3]'}`}>
-            {handout === 'shared' ? 'This code' : 'Each code'} {effectWords}.
+          <span
+            className={`text-xs ${effect === "free" ? "text-amber-300" : "text-[#A5A8C3]"}`}
+          >
+            {handout === "shared" ? "This code" : "Each code"} {effectWords}.
           </span>
         </div>
 
         {lastBatch.length > 0 && (
           <button
             type="button"
-            onClick={() => download(lastBatch, `codes-${lastBatch.length}-${eventId}.csv`)}
+            onClick={() =>
+              download(lastBatch, `codes-${lastBatch.length}-${eventId}.csv`)
+            }
             className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700"
           >
-            <FiDownload size={15} /> Download the {lastBatch.length} codes you just made
+            <FiDownload size={15} /> Download the {lastBatch.length} codes you
+            just made
           </button>
         )}
       </div>
@@ -559,11 +593,11 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
               className="flex flex-1 items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/[0.04]"
             >
               <span>
-                {total} code{total > 1 ? 's' : ''}
+                {total} code{total > 1 ? "s" : ""}
               </span>
               <FiChevronDown
                 size={16}
-                className={`transition-transform ${listOpen ? 'rotate-180' : ''}`}
+                className={`transition-transform ${listOpen ? "rotate-180" : ""}`}
               />
             </button>
             {codes.length > 0 && (
@@ -586,7 +620,9 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
                       <th className="px-3 py-2 font-medium">Code</th>
                       <th className="px-3 py-2 font-medium">Does</th>
                       <th className="px-3 py-2 font-medium">Used</th>
-                      <th className="hidden px-3 py-2 font-medium sm:table-cell">Works</th>
+                      <th className="hidden px-3 py-2 font-medium sm:table-cell">
+                        Works
+                      </th>
                       <th className="px-3 py-2 font-medium">Status</th>
                       <th className="px-3 py-2" />
                     </tr>
@@ -601,7 +637,7 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
                               type="button"
                               onClick={() => {
                                 void navigator.clipboard.writeText(passkey);
-                                toast.success('Code copied');
+                                toast.success("Code copied");
                               }}
                               className="text-[#777B98] hover:text-white"
                               aria-label="Copy code"
@@ -615,7 +651,9 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
                         </td>
                         <td className="px-3 py-2 text-[#A5A8C3]">Unlocks</td>
                         <td className="px-3 py-2 text-[#A5A8C3]">No limit</td>
-                        <td className="hidden px-3 py-2 text-[#A5A8C3] sm:table-cell">Always</td>
+                        <td className="hidden px-3 py-2 text-[#A5A8C3] sm:table-cell">
+                          Always
+                        </td>
                         <td className="px-3 py-2">
                           <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-300">
                             Active
@@ -635,11 +673,13 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
                           )}
                         </td>
                         <td
-                          className={`px-3 py-2 ${codeEffectOf(c) === 'unlock' ? 'text-[#A5A8C3]' : 'text-[#D8B4FE]'}`}
+                          className={`px-3 py-2 ${codeEffectOf(c) === "unlock" ? "text-[#A5A8C3]" : "text-[#D8B4FE]"}`}
                         >
                           {codeEffectLabel(c)}
                         </td>
-                        <td className="px-3 py-2 text-[#A5A8C3]">{usedLabel(c)}</td>
+                        <td className="px-3 py-2 text-[#A5A8C3]">
+                          {usedLabel(c)}
+                        </td>
                         <td className="hidden px-3 py-2 text-[#A5A8C3] sm:table-cell">
                           {validLabel(c)}
                         </td>
@@ -647,14 +687,14 @@ export default function CodesPanel({ eventId, hostId, isFree, codeGated, sharedP
                           <button
                             type="button"
                             onClick={() => void toggleActive(c)}
-                            title={c.is_active ? 'Pause' : 'Turn back on'}
+                            title={c.is_active ? "Pause" : "Turn back on"}
                             className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                               c.is_active
-                                ? 'bg-green-500/15 text-green-300'
-                                : 'bg-white/[0.06] text-[#A5A8C3]'
+                                ? "bg-green-500/15 text-green-300"
+                                : "bg-white/[0.06] text-[#A5A8C3]"
                             }`}
                           >
-                            {c.is_active ? 'Active' : 'Paused'}
+                            {c.is_active ? "Active" : "Paused"}
                           </button>
                         </td>
                         <td className="px-3 py-2 text-right">
