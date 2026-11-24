@@ -5,7 +5,23 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { RichTextEditor, RichTextView } from '../../components/RichTextEditor';
 import { ImageCropModal } from '../../components/ImageCropModal';
-import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Heart,
+  Lock,
+  MapPin,
+  Navigation,
+  Share,
+  ShieldAlert,
+  Star,
+  Users,
+  Video,
+} from 'lucide-react';
 import {
   SITE_URL,
   createLandingPage,
@@ -18,6 +34,8 @@ import {
   type MarketingEventOption,
   type LandingPageDTO,
   type LandingPageUpdatePayload,
+  fetchLiveEvent,
+  type LiveEventData,
 } from '../../api/landingPages';
 
 const inputCls =
@@ -45,6 +63,90 @@ const Label: React.FC<{ children: React.ReactNode; hint?: string }> = ({ childre
   </label>
 );
 
+// ── Live-page mirror helpers ─────────────────────────────────────────────
+// Copied from the website's event page (ExperienceDetailClient.tsx, lib/moods.ts,
+// lib/hostTier.ts, lib/datetime.ts) so the preview shows what visitors see.
+
+const ist = (d: string | Date, opts: Intl.DateTimeFormatOptions, locale = 'en-GB') =>
+  new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Kolkata', ...opts }).format(new Date(d));
+const istDay = (d: string) => ist(d, { year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-CA');
+const istWeekday = (d: string) => ist(d, { weekday: 'short' });
+const istDayMonth = (d: string) => ist(d, { day: 'numeric', month: 'short' });
+const istTime = (d: string | Date) => ist(d, { hour: 'numeric', minute: '2-digit', hour12: true }, 'en-US');
+
+// ponytail: only the moods whose label differs from the title-cased value;
+// the full alias list is in the website's lib/moods.ts.
+const MOOD_LABELS: Record<string, string> = {
+  chill: 'Relaxing',
+  relaxing: 'Relaxing',
+  adventurous: 'Adventure',
+  education: 'Educational',
+  culture: 'Cultural',
+  food: 'Foodie',
+  style: 'Fashion',
+  kids: 'Family',
+  mentorship: 'Career',
+  language: 'Languages',
+  coding: 'Tech',
+  finance: 'Business',
+};
+const moodLabel = (m: string) => {
+  const k = m.trim().toLowerCase();
+  return MOOD_LABELS[k] ?? k.replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+function livePreview(live: LiveEventData | null, pickedDate: string | null, allDates: boolean) {
+  if (!live) return null;
+  const { event, availability, host, rating } = live;
+  const now = new Date();
+  const baseDate = event.next_available_date ?? event.time;
+  const upcoming = (availability ?? []).filter((a) => new Date(a.date) >= now);
+  const openDays: string[] = [];
+  const seen = new Set<string>();
+  for (const a of upcoming) {
+    if (a.is_fully_booked) continue;
+    const day = istDay(a.date);
+    if (seen.has(day)) continue;
+    seen.add(day);
+    openDays.push(a.date);
+  }
+  const dateChips = allDates ? openDays : openDays.slice(0, 4);
+  const shownDate = pickedDate ?? openDays[0] ?? baseDate;
+  const endDate =
+    shownDate && event.duration_minutes
+      ? new Date(new Date(shownDate).getTime() + event.duration_minutes * 60_000)
+      : null;
+  const tiers = event.price_tiers ?? [];
+  const fromCents = tiers.length ? Math.min(...tiers.map((t) => t.price_cents)) : (event.price_cents ?? 0);
+  const hasPassed = availability ? upcoming.length === 0 && !!baseDate && new Date(baseDate) < now : false;
+  const soldOut = availability
+    ? upcoming.length > 0 && upcoming.every((a) => a.is_fully_booked)
+    : event.capacity - event.total_bookings <= 0;
+  const unverifiedHost = host
+    ? host.host_tier
+      ? host.host_tier === 'unverified'
+      : Boolean(host.application_status && host.application_status !== 'approved')
+    : false;
+  return {
+    event,
+    host,
+    unverifiedHost,
+    rating: rating?.average_rating ?? null,
+    totalReviews: rating?.total_reviews ?? 0,
+    place: event.is_online ? 'Online' : (event.location ?? 'Location shared after booking'),
+    manyDates: event.is_recurring || event.schedule_type === 'custom_dates' || (event.custom_dates?.length ?? 0) > 0,
+    openDays,
+    dateChips,
+    shownDate,
+    endDate,
+    price: `₹${(fromCents / 100).toFixed(0)}`,
+    status: hasPassed ? 'Event has passed' : soldOut ? 'Fully booked' : null,
+    directions:
+      event.google_maps_url ??
+      (event.location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}` : null),
+  };
+}
+
 export const LandingPagesDirectory: React.FC = () => {
   const [pages, setPages] = useState<LandingPageDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +165,63 @@ export const LandingPagesDirectory: React.FC = () => {
   const [picking, setPicking] = useState(false);
   const [eventQuery, setEventQuery] = useState('');
   const [eventResults, setEventResults] = useState<MarketingEventOption[]>([]);
+
+  // The linked event as the website shows it (dates, location, host, price).
+  const [live, setLive] = useState<{ slug: string; data: LiveEventData | null } | null>(null);
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [allDates, setAllDates] = useState(false);
+  const eventSlug = editing?.event_slug;
+  useEffect(() => {
+    if (!eventSlug) return;
+    let stale = false;
+    fetchLiveEvent(eventSlug)
+      .then((data) => !stale && setLive({ slug: eventSlug, data }))
+      .catch(() => !stale && setLive({ slug: eventSlug, data: null }));
+    return () => {
+      stale = true;
+    };
+  }, [eventSlug]);
+  const lp = livePreview(live && live.slug === eventSlug ? live.data : null, pickedDate, allDates);
+
+  const chip =
+    'inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur';
+  const hostedBy = lp?.host && (
+    <div>
+      <p className="mb-3 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">Hosted by</p>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <img
+            src={lp.host.avatar_url || `${SITE_URL}/assets/home/profile1.png`}
+            alt=""
+            className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+              <span className="truncate">
+                {lp.host.first_name} {lp.host.last_name}
+              </span>
+              {lp.host.is_identity_verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#B57BFF]" />}
+            </p>
+            <p className="truncate text-xs text-white/55">
+              {lp.host.tagline ?? (lp.host.city ? `Host in ${lp.host.city}` : 'Host')}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white">
+            View Profile
+          </span>
+        </div>
+        {lp.unverifiedHost && (
+          <p className="flex items-start gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/[0.08] px-3.5 py-2.5 text-xs leading-5 text-amber-100/80">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <span>
+              <span className="font-semibold text-amber-200">Community event.</span> This host isn&apos;t verified by
+              MySlotMate. Never pay outside the app, and report anything that feels off.
+            </span>
+          </p>
+        )}
+      </div>
+    </div>
+  );
 
   const load = async () => {
     try {
@@ -98,6 +257,8 @@ export const LandingPagesDirectory: React.FC = () => {
     setEditing(p);
     setForm(toForm(p));
     setActiveField(null);
+    setPickedDate(null);
+    setAllDates(false);
   };
 
   const closeEditor = () => {
@@ -257,8 +418,6 @@ export const LandingPagesDirectory: React.FC = () => {
   };
 
   // ── Views ──────────────────────────────────────────────────────────────
-  // Book pill as the event page shows it; the button word is editable in place.
-  // The price after it comes live from the linked event on the website.
   // Text on the canvas reads like the live page; double-click turns it into an
   // input, and Enter / Esc / clicking away turns it back.
   const editableText = (
@@ -291,14 +450,20 @@ export const LandingPagesDirectory: React.FC = () => {
       </div>
     );
 
-  // Book pill as the event page shows it. The price after the word comes live
-  // from the linked event on the website.
-  const ctaBlock = form && (
-    <div className="font-outfit mx-auto flex h-14 w-full max-w-[720px] items-center justify-center gap-1.5 rounded-full bg-white px-6 text-[17px] font-semibold text-[#080914] shadow-[0_20px_60px_-10px_rgb(0_0_0/0.8)] md:h-[58px] md:text-lg">
-      {editableText('cta', 'cta_text', 'Book tickets', 'w-auto min-w-[8rem] text-right', true)}
-      <span className="text-[#080914]/50">from ₹price</span>
-    </div>
-  );
+  // Book pill as the event page shows it (bg-[#fff]: the admin dark theme
+  // repaints plain bg-white). The word is editable; the price is live.
+  const pill =
+    'font-outfit mx-auto flex h-14 w-full max-w-[720px] items-center justify-center gap-1.5 rounded-full text-[17px] font-semibold shadow-[0_20px_60px_-10px_rgb(0_0_0/0.8)] md:h-[58px] md:text-lg';
+  const ctaBlock =
+    form &&
+    (lp?.status ? (
+      <p className={`${pill} border border-white/10 bg-[#1B1D33]/95 text-white/60 backdrop-blur-xl`}>{lp.status}</p>
+    ) : (
+      <div className={`${pill} bg-[#fff] px-6 text-[#080914]`}>
+        {editableText('cta', 'cta_text', 'Book tickets', 'w-auto min-w-[8rem] text-right', true)}
+        <span>{lp?.event.is_free ? '· Free' : `from ${lp?.price ?? '₹…'}`}</span>
+      </div>
+    ));
 
   return (
     <div className="space-y-6">
@@ -462,9 +627,11 @@ export const LandingPagesDirectory: React.FC = () => {
 
           {/* The page itself — mirrors the event page the website renders for it
               (MySlotmate-Frontend/src/app/experience/[slug]/ExperienceDetailClient.tsx):
-              same column widths, fonts, sizes and spacing, so keep the two in step.
-              Greyed parts (chips, dates, location, host, price) come live from the event.
-              Double-click text to edit, hover images for photo controls. */}
+              same layout, classes and live data, so keep the two in step.
+              Title, hook, About, photos and the Book word are this page's own
+              (double-click to edit); everything else comes live from the event.
+              Colours use bg-[#fff] where the page has bg-white, because the admin
+              dark theme repaints plain bg-white. */}
           <div className="lp-canvas relative isolate overflow-clip rounded-3xl bg-[#080914] text-white">
             {/* Ambient glow taken from the poster, as on the live page. */}
             {form.cover_image_url && (
@@ -499,7 +666,7 @@ export const LandingPagesDirectory: React.FC = () => {
               </div>
 
               <div className="grid gap-8 lg:grid-cols-[380px_minmax(0,1fr)] lg:gap-14">
-                {/* Left: poster + more photos + host */}
+                {/* Left: poster + host */}
                 <div className="flex flex-col gap-7">
                   <div className="group relative aspect-[4/5] w-full overflow-hidden rounded-[24px] bg-[#131328] shadow-[0_30px_80px_-30px_rgb(0_0_0/0.8)] ring-1 ring-white/10">
                     {form.cover_image_url ? (
@@ -512,15 +679,30 @@ export const LandingPagesDirectory: React.FC = () => {
                         <img src={form.cover_image_url} alt="" className="relative block h-full w-full object-contain" />
                       </>
                     ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-white/40">No poster</div>
+                      <div className="flex h-full items-center justify-center text-sm text-white/40">No photos available</div>
                     )}
-                    {form.gallery_urls.length > 0 && (
-                      <span className="absolute bottom-4 left-4 flex h-9 items-center gap-2 rounded-full bg-black/40 px-3.5 text-xs font-semibold backdrop-blur-md">
-                        1 / {(form.cover_image_url ? 1 : 0) + form.gallery_urls.length}
-                      </span>
+                    <span className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
+                      <Heart className="h-4 w-4" />
+                    </span>
+                    <span className="absolute right-4 bottom-4 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
+                      <Share className="h-4 w-4" />
+                    </span>
+                    {(form.cover_image_url ? 1 : 0) + form.gallery_urls.length > 1 && (
+                      <>
+                        <span className="absolute top-1/2 left-4 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-md transition group-hover:opacity-100">
+                          <ArrowLeft className="h-4 w-4" />
+                        </span>
+                        <span className="absolute top-1/2 right-4 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-md transition group-hover:opacity-100">
+                          <ArrowLeft className="h-4 w-4 rotate-180" />
+                        </span>
+                        <span className="absolute bottom-4 left-4 flex h-9 items-center gap-2 rounded-full bg-black/40 px-3.5 text-xs font-semibold backdrop-blur-md">
+                          1 / {(form.cover_image_url ? 1 : 0) + form.gallery_urls.length}
+                        </span>
+                      </>
                     )}
-                    <div className="absolute inset-x-0 top-4 flex justify-center gap-2 opacity-0 transition group-hover:opacity-100">
-                      <label className="cursor-pointer rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold backdrop-blur hover:bg-black/80">
+                    {/* Editor-only photo controls, on hover. */}
+                    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/30 opacity-0 transition group-hover:opacity-100">
+                      <label className="cursor-pointer rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold backdrop-blur hover:bg-black/90">
                         {form.cover_image_url ? 'Change poster' : '+ Add poster'}
                         <input
                           type="file"
@@ -534,7 +716,7 @@ export const LandingPagesDirectory: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => set('cover_image_url', '')}
-                          className="rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold backdrop-blur hover:bg-rose-600"
+                          className="rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold backdrop-blur hover:bg-rose-600"
                         >
                           Remove
                         </button>
@@ -542,10 +724,11 @@ export const LandingPagesDirectory: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Editor-only: the live page shows these in the poster slider. */}
-                  <div>
+                  {/* Editor-only: on the live page these are in the poster slider. */}
+                  <div className="rounded-2xl border border-dashed border-white/15 p-3">
                     <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">
-                      More photos <span className="normal-case tracking-normal text-white/30">· in the poster slider</span>
+                      More photos{' '}
+                      <span className="normal-case tracking-normal text-white/30">· editor only, shown in the poster slider</span>
                     </p>
                     <div className="grid grid-cols-4 gap-2">
                       {form.gallery_urls.map((u) => (
@@ -580,33 +763,42 @@ export const LandingPagesDirectory: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="lp-live">
-                    <p className="mb-3 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">Hosted by</p>
-                    <div className="flex items-center gap-3">
-                      <span className="h-11 w-11 shrink-0 rounded-full bg-white/10 ring-1 ring-white/15" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">Host of “{editing.event_title}”</p>
-                        <p className="truncate text-xs text-white/55">Host tagline</p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold">
-                        View Profile
-                      </span>
-                    </div>
-                  </div>
+                  {lp?.host && <div className="hidden lg:block">{hostedBy}</div>}
                 </div>
 
-                {/* Right: chips, title, when/where, about */}
+                {/* Right: what, when, where, about */}
                 <div className="flex min-w-0 flex-col gap-9">
                   <header>
-                    <div className="lp-live flex flex-wrap items-center gap-2">
-                      {['Mood', 'Public event', 'New'].map((c) => (
-                        <span
-                          key={c}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur"
-                        >
-                          {c}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {lp?.event.mood && (
+                        <span className={chip}>
+                          <i className="h-1.5 w-1.5 rounded-full bg-[#D8B4FE]" />
+                          {moodLabel(lp.event.mood)}
                         </span>
-                      ))}
+                      )}
+                      {lp && (
+                        <span className={chip}>
+                          {lp.event.is_private ? (
+                            <>
+                              <Lock className="h-3.5 w-3.5" /> Private event
+                            </>
+                          ) : (
+                            <>
+                              <Users className="h-3.5 w-3.5" /> Public event
+                            </>
+                          )}
+                        </span>
+                      )}
+                      {lp &&
+                        (lp.rating && lp.totalReviews > 0 ? (
+                          <span className={chip}>
+                            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                            {lp.rating.toFixed(1)}
+                            <span className="text-white/50">({lp.totalReviews})</span>
+                          </span>
+                        ) : (
+                          <span className={`${chip} text-[#D8B4FE]`}>New</span>
+                        ))}
                     </div>
                     <div className="mt-5">
                       {editableText(
@@ -616,47 +808,117 @@ export const LandingPagesDirectory: React.FC = () => {
                         'font-outfit text-[clamp(28px,3.4vw,42px)] leading-[1.1] font-medium tracking-[-0.02em] text-balance',
                       )}
                     </div>
-                    <ul className="lp-live mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] text-white/75">
-                      <li className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-white/50" /> Next date
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-white/50" /> Time
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-white/50" /> Location
-                      </li>
-                    </ul>
-                    <div className="lp-live mt-6 flex flex-wrap gap-2.5">
-                      {['Sat', 'Sun', 'Sat'].map((d, i) => (
-                        <span
-                          key={i}
-                          className={`flex min-w-[84px] flex-col items-center rounded-2xl px-4 py-2.5 text-[15px] leading-snug font-medium ${
-                            i === 0 ? 'bg-white text-[#080914]' : 'bg-white/[0.07]'
-                          }`}
-                        >
-                          <span className={i === 0 ? 'text-[#080914]/60' : 'text-white/60'}>{d}</span>
-                          Date
-                        </span>
-                      ))}
-                    </div>
+                    {lp ? (
+                      <ul className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] text-white/75">
+                        {lp.shownDate && (
+                          <li className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-white/50" />
+                            {istWeekday(lp.shownDate)}, {istDayMonth(lp.shownDate)}
+                            {lp.manyDates && lp.dateChips.length <= 1 && (
+                              <span className="text-white/45">+ more dates</span>
+                            )}
+                          </li>
+                        )}
+                        {lp.shownDate && (
+                          <li className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-white/50" />
+                            {istTime(lp.shownDate)}
+                            {lp.endDate && ` – ${istTime(lp.endDate)}`}
+                          </li>
+                        )}
+                        <li className="flex min-w-0 items-center gap-2">
+                          {lp.event.is_online ? (
+                            <Video className="h-4 w-4 shrink-0 text-white/50" />
+                          ) : (
+                            <MapPin className="h-4 w-4 shrink-0 text-white/50" />
+                          )}
+                          <span className="truncate">{lp.place}</span>
+                        </li>
+                      </ul>
+                    ) : (
+                      <p className="mt-5 text-[15px] text-white/45">
+                        {live?.slug === eventSlug ? 'Could not load the linked event.' : 'Loading the linked event…'}
+                      </p>
+                    )}
+                    {lp && lp.dateChips.length > 1 && (
+                      <div className="mt-6 flex flex-wrap gap-2.5">
+                        {lp.dateChips.map((d) => {
+                          const on = d === lp.shownDate;
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setPickedDate(d)}
+                              aria-pressed={on}
+                              className={`flex min-w-[84px] shrink-0 flex-col items-center rounded-2xl px-4 py-2.5 text-[15px] leading-snug font-medium transition ${
+                                on ? 'bg-[#fff] text-[#080914]' : 'bg-white/[0.07] text-white hover:bg-white/[0.12]'
+                              }`}
+                            >
+                              <span className={on ? 'text-[#080914]/60' : 'text-white/60'}>{istWeekday(d)}</span>
+                              {istDayMonth(d)}
+                            </button>
+                          );
+                        })}
+                        {lp.openDays.length > 4 && (
+                          <button
+                            type="button"
+                            onClick={() => setAllDates((v) => !v)}
+                            className="flex min-w-[84px] shrink-0 flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-4 py-2.5 text-[13px] leading-snug font-medium text-white/70 transition hover:border-white/40 hover:text-white"
+                          >
+                            {allDates ? (
+                              'Show less'
+                            ) : (
+                              <>
+                                +{lp.openDays.length - 4}
+                                <span>more</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </header>
 
-                  <section className="lp-live">
-                    <h2 className="font-outfit mb-4 text-lg font-medium">Location</h2>
-                    <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
-                        <MapPin className="h-5 w-5 text-[#D8B4FE]" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[15px] leading-snug font-semibold">Event location</span>
-                        <span className="mt-0.5 block text-xs text-[#D8B4FE]">Open in Google Maps</span>
-                      </span>
-                    </div>
-                  </section>
+                  {lp?.host && <div className="border-t border-white/[0.08] pt-7 lg:hidden">{hostedBy}</div>}
+
+                  {lp && (
+                    <section>
+                      <h2 className="font-outfit mb-4 text-lg font-medium text-white">Location</h2>
+                      {lp.event.is_online ? (
+                        <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+                            <Video className="h-5 w-5 text-[#D8B4FE]" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-semibold text-white">Online experience</p>
+                            <p className="text-sm text-white/55">Join from anywhere on a video call.</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+                            <MapPin className="h-5 w-5 text-[#D8B4FE]" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[15px] leading-snug font-semibold text-white">
+                              {lp.event.location ?? 'Exact meeting point shared after booking'}
+                            </span>
+                            {lp.directions && (
+                              <span className="mt-0.5 block text-xs text-[#D8B4FE]">Open in Google Maps</span>
+                            )}
+                          </span>
+                          {lp.directions && (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+                              <Navigation className="h-4 w-4" />
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )}
 
                   <section>
-                    <h2 className="font-outfit mb-4 text-lg font-medium">About the event</h2>
+                    <h2 className="font-outfit mb-4 text-lg font-medium text-white">About the event</h2>
                     <div className="mb-4">
                       {editableText(
                         'hook',
@@ -678,7 +940,7 @@ export const LandingPagesDirectory: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setActiveField(null)}
-                          className="mt-3 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-[#080914]"
+                          className="mt-3 rounded-full bg-[#fff] px-4 py-1.5 text-xs font-bold text-[#080914]"
                         >
                           Done
                         </button>
@@ -692,7 +954,7 @@ export const LandingPagesDirectory: React.FC = () => {
                         {form.content ? (
                           <RichTextView html={form.content} />
                         ) : (
-                          <p className="text-sm text-white/40">Double-click to write about the experience…</p>
+                          <p className="text-sm text-white/55">No description available.</p>
                         )}
                       </div>
                     )}
@@ -704,7 +966,7 @@ export const LandingPagesDirectory: React.FC = () => {
             {/* The live page pins this pill to the bottom of the screen. */}
             <div className="sticky bottom-0 z-10 px-5 pb-5">{ctaBlock}</div>
             <p className="pb-6 text-center text-xs text-white/40">
-              Dimmed parts come live from “{editing.event_title}” on the website — they can’t be edited here.
+              Dates, location, host and price come live from “{editing.event_title}” — edit them on the event itself.
             </p>
           </div>
 

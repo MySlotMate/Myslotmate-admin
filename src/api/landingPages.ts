@@ -81,3 +81,56 @@ export async function uploadLandingImage(file: File): Promise<string> {
   });
   return results[0]?.url || '';
 }
+
+// ── Live event data for the editor preview ───────────────────────────────
+// The same public endpoints the website's event page reads, so the preview
+// shows the real dates, location, host and price.
+
+export interface LiveEvent {
+  id: string;
+  host_id: string;
+  mood: string | null;
+  is_private: boolean;
+  is_online: boolean;
+  is_free: boolean;
+  is_recurring: boolean;
+  schedule_type: string | null;
+  custom_dates: string[] | null;
+  location: string | null;
+  google_maps_url: string | null;
+  time: string | null;
+  next_available_date: string | null;
+  duration_minutes: number | null;
+  capacity: number;
+  total_bookings: number;
+  price_cents: number | null;
+  price_tiers: Array<{ price_cents: number }> | null;
+}
+
+export interface LiveHost {
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+  tagline: string | null;
+  city: string | null;
+  is_identity_verified: boolean;
+  host_tier?: string | null;
+  application_status?: string | null;
+}
+
+export interface LiveEventData {
+  event: LiveEvent;
+  availability: Array<{ date: string; is_fully_booked: boolean }> | null;
+  host: LiveHost | null;
+  rating: { average_rating: number; total_reviews: number } | null;
+}
+
+export async function fetchLiveEvent(eventSlug: string): Promise<LiveEventData> {
+  const event = await apiFetch<LiveEvent>(`/events/${encodeURIComponent(eventSlug)}`, { auth: false });
+  const [availability, host, rating] = await Promise.all([
+    apiFetch<LiveEventData['availability']>(`/events/${event.id}/availability`, { auth: false }).catch(() => null),
+    apiFetch<LiveHost>(`/hosts/${event.host_id}`, { auth: false }).catch(() => null),
+    apiFetch<LiveEventData['rating']>(`/reviews/event/${event.id}/rating`, { auth: false }).catch(() => null),
+  ]);
+  return { event, availability, host, rating };
+}

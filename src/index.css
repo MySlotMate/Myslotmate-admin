@@ -1911,10 +1911,6 @@ body {
 .lp-inline::placeholder {
   color: rgba(255, 255, 255, 0.35);
 }
-/* Parts of the event-marketing canvas that come live from the event. */
-.lp-canvas .lp-live {
-  opacity: 0.55;
-}
 .lp-inline-dark:hover {
   outline-color: rgba(8, 9, 20, 0.25);
 }
