@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Download } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
+import { MonthPill } from '../../components/event-form/DateTimePills';
+import { currentMonth } from '../../lib/datetime';
 import { Button } from '../../components/ui/Button';
 import {
   addTaxDeposit,
@@ -192,7 +194,7 @@ export const TaxSettingsCard: React.FC = () => {
             Per host: PAN, GSTIN, gross, refunds, net, TCS (CGST / SGST / IGST) and TDS. File GSTR-8 by the 10th.
           </p>
           <div className="mt-3 flex items-end gap-3">
-            <input type="month" className={INPUT} value={month} onChange={(e) => setMonth(e.target.value)} />
+            <MonthPill value={month} max={currentMonth()} onChange={setMonth} />
             <Button variant="primary" size="sm" type="button" disabled={downloading || !month} onClick={() => void download()}>
               <Download className="h-4 w-4" /> {downloading ? 'Preparing…' : 'Download CSV'}
             </Button>
@@ -218,11 +220,11 @@ export const TaxSettingsCard: React.FC = () => {
               <option value="tcs">TCS</option>
               <option value="tds">TDS</option>
             </select>
-            <input
-              type="month"
-              className={INPUT}
+            <MonthPill
               value={dep.period}
-              onChange={(e) => setDep({ ...dep, period: e.target.value })}
+              max={currentMonth()}
+              ariaLabel="Period"
+              onChange={(v) => setDep({ ...dep, period: v })}
             />
             <input
               className={`${INPUT} w-28`}

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Search } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
+import { MonthPill } from '../../components/event-form/DateTimePills';
+import { currentMonth } from '../../lib/datetime';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { fetchHosts } from '../../api/directory';
@@ -110,10 +112,10 @@ export const HostStatementsTab: React.FC = () => {
               Find
             </Button>
           </form>
-          <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+          <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
             Month
-            <input type="month" className={INPUT} value={month} onChange={(e) => setMonth(e.target.value)} />
-          </label>
+            <MonthPill value={month} max={currentMonth()} onChange={setMonth} />
+          </div>
         </div>
 
         {hosts.length > 0 && (

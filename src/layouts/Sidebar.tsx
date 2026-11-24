@@ -25,6 +25,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useNavBadges, type BadgePath } from './useNavBadges';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -83,6 +84,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       ? [{ title: 'Growth', items: [{ name: 'Event marketing', path: '/event-marketing', icon: Globe }] }]
       : SECTIONS;
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem(COLLAPSE_KEY) === '1');
+  // New since the tab was last opened (see useNavBadges). Not for the marketing login.
+  const badges = useNavBadges(user?.role !== 'marketing');
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
@@ -165,6 +168,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               </p>
               {section.items.map((item) => {
                 const Icon = item.icon;
+                const count = badges[item.path as BadgePath] ?? 0;
+                const countText = count > 99 ? '99+' : String(count);
                 return (
                   <NavLink
                     key={item.name}
@@ -180,12 +185,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   >
                     <Icon className="h-4 w-4 shrink-0" />
                     <span className={labelCls}>{item.name}</span>
+                    {count > 0 && (
+                      <span
+                        aria-label={`${count} new`}
+                        className={`ml-auto min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white ${
+                          collapsed ? 'lg:absolute lg:-right-1 lg:-top-1 lg:ml-0' : ''
+                        }`}
+                      >
+                        {countText}
+                      </span>
+                    )}
 
                     {/* Floating Tooltip when Collapsed */}
                     {collapsed && (
                       <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 hidden group-hover:flex items-center px-3 py-1.5 rounded-xl border border-white/10 bg-[#14152a] text-white text-xs font-semibold whitespace-nowrap shadow-panel z-50 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
                         <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#14152a]" />
                         {item.name}
+                        {count > 0 ? ` · ${countText} new` : ''}
                       </div>
                     )}
                   </NavLink>

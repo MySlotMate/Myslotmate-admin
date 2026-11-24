@@ -14,6 +14,7 @@ import {
   WEEKDAY_LABELS,
   type SessionWindow,
 } from "../lib/sessionSlots";
+import { DatePill, TimePill, WeekdayPill } from "./event-form/DateTimePills";
 
 /**
  * Availability editor for one-on-one experiences.
@@ -215,62 +216,45 @@ export default function SessionWindowsEditor({
                 {isWeekly ? "Day" : "Date"}
               </label>
               {isWeekly ? (
-                <select
-                  value={w.weekday ?? ""}
-                  onChange={(e) =>
+                <WeekdayPill
+                  value={w.weekday}
+                  onChange={(day) =>
                     onWindowsChange(
                       windows.map((win, i) =>
-                        i === idx
-                          ? {
-                              ...win,
-                              weekday:
-                                e.target.value === ""
-                                  ? undefined
-                                  : Number(e.target.value),
-                            }
-                          : win,
+                        i === idx ? { ...win, weekday: day } : win,
                       ),
                     )
                   }
-                  className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#A020F0]"
-                >
-                  <option value="">Pick a day</option>
-                  {WEEKDAY_LABELS.map((label, day) => (
-                    <option key={label} value={day}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                />
               ) : (
-                <input
-                  type="date"
-                  value={w.date}
+                <DatePill
+                  value={w.date ?? ""}
                   min={today}
-                  onChange={(e) => updateWindow(idx, "date", e.target.value)}
-                  className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#A020F0]"
+                  onChange={(v) => updateWindow(idx, "date", v)}
                 />
               )}
             </div>
-            <div className="w-32 min-w-[110px]">
+            <div className="min-w-[110px]">
               <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">
                 From
               </label>
-              <input
-                type="time"
+              <TimePill
                 value={w.start}
-                onChange={(e) => updateWindow(idx, "start", e.target.value)}
-                className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#A020F0]"
+                placeholder="Start"
+                ariaLabel="From"
+                onChange={(v) => updateWindow(idx, "start", v)}
               />
             </div>
-            <div className="w-32 min-w-[110px]">
+            <div className="min-w-[110px]">
               <label className="mb-1 block text-xs font-medium text-[#A5A8C3]">
                 To
               </label>
-              <input
-                type="time"
+              <TimePill
                 value={w.end}
-                onChange={(e) => updateWindow(idx, "end", e.target.value)}
-                className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#A020F0]"
+                start={w.start || undefined}
+                placeholder="End"
+                ariaLabel="To"
+                onChange={(v) => updateWindow(idx, "end", v)}
               />
             </div>
             {windows.length > 1 && (

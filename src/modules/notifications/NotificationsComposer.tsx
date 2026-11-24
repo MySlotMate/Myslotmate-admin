@@ -3,6 +3,7 @@ import { useMockData } from '../../context/MockDataContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
+import { DateTimePill } from '../../components/event-form/DateTimePills';
 
 export const NotificationsComposer: React.FC = () => {
   const { notifications, setNotifications } = useMockData();
@@ -120,14 +121,8 @@ export const NotificationsComposer: React.FC = () => {
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-bold text-slate-600" htmlFor="notifTime">Schedule time</label>
-            <input 
-              id="notifTime" 
-              className="w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400" 
-              type="datetime-local" 
-              value={scheduleTime}
-              onChange={(e) => setScheduleTime(e.target.value)}
-            />
+            <p className="mb-2 block text-xs font-bold text-slate-600">Schedule time</p>
+            <DateTimePill label="Schedule" value={scheduleTime} onChange={setScheduleTime} />
           </div>
 
           <div className="flex flex-wrap gap-3 pt-2">

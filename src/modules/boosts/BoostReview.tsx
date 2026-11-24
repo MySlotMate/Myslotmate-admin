@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Check } from 'lucide-react';
+import { DateTimePill } from '../../components/event-form/DateTimePills';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -348,14 +349,27 @@ export const BoostReview: React.FC = () => {
                 onChange={(e) => setDraft({ ...draft, note: e.target.value })}
               />
             </label>
-            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+            <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
               Planned start (IST)
-              <input type="datetime-local" className={INPUT} value={draft.from} disabled={busy} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
-            </label>
-            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+              <DateTimePill
+                label="Planned start"
+                clearable
+                value={draft.from}
+                disabled={busy}
+                onChange={(v) => setDraft({ ...draft, from: v })}
+              />
+            </div>
+            <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
               Planned end (IST)
-              <input type="datetime-local" className={INPUT} value={draft.until} disabled={busy} onChange={(e) => setDraft({ ...draft, until: e.target.value })} />
-            </label>
+              <DateTimePill
+                label="Planned end"
+                clearable
+                value={draft.until}
+                min={draft.from ? draft.from.slice(0, 10) : undefined}
+                disabled={busy}
+                onChange={(v) => setDraft({ ...draft, until: v })}
+              />
+            </div>
           </div>
 
           {problems.length > 0 && <p className="mt-3 text-xs font-semibold text-rose-600">{problems[0]}</p>}
@@ -382,10 +396,10 @@ export const BoostReview: React.FC = () => {
               </p>
               {ratesTable(d.rates)}
               <div className="mt-4 flex flex-wrap items-end justify-end gap-3">
-                <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
                   Ends (IST, optional)
-                  <input type="datetime-local" className={INPUT} value={liveUntil} disabled={busy} onChange={(e) => setLiveUntil(e.target.value)} />
-                </label>
+                  <DateTimePill label="Ends" clearable value={liveUntil} disabled={busy} onChange={setLiveUntil} />
+                </div>
                 <Button variant="primary" size="sm" type="button" disabled={busy} onClick={goLive}>
                   Go live
                 </Button>
