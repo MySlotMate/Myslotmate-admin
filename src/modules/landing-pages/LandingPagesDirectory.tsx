@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { RichTextEditor, RichTextView } from '../../components/RichTextEditor';
 import { ImageCropModal } from '../../components/ImageCropModal';
+import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin } from 'lucide-react';
 import {
   SITE_URL,
   createLandingPage,
@@ -293,9 +294,9 @@ export const LandingPagesDirectory: React.FC = () => {
   // Book pill as the event page shows it. The price after the word comes live
   // from the linked event on the website.
   const ctaBlock = form && (
-    <div className="flex w-full max-w-xl items-center justify-center gap-1 rounded-full bg-white px-6 py-4 text-lg font-semibold text-[#080914] shadow-lg">
+    <div className="font-outfit mx-auto flex h-14 w-full max-w-[720px] items-center justify-center gap-1.5 rounded-full bg-white px-6 text-[17px] font-semibold text-[#080914] shadow-[0_20px_60px_-10px_rgb(0_0_0/0.8)] md:h-[58px] md:text-lg">
       {editableText('cta', 'cta_text', 'Book tickets', 'w-auto min-w-[8rem] text-right', true)}
-      <span className="text-[#080914]/50">· from ₹price</span>
+      <span className="text-[#080914]/50">from ₹price</span>
     </div>
   );
 
@@ -460,44 +461,65 @@ export const LandingPagesDirectory: React.FC = () => {
           }
 
           {/* The page itself — mirrors the event page the website renders for it
-              (MySlotmate-Frontend/src/app/experience/[slug]/ExperienceDetailClient.tsx).
+              (MySlotmate-Frontend/src/app/experience/[slug]/ExperienceDetailClient.tsx):
+              same column widths, fonts, sizes and spacing, so keep the two in step.
               Greyed parts (chips, dates, location, host, price) come live from the event.
-              It reads like the live page; double-click text to edit, hover images for photo controls. */}
-          <div className="lp-canvas overflow-hidden rounded-3xl bg-[#080914] px-5 py-8 text-white md:px-8">
-            {/* Back circle + breadcrumb, as on the live page; the circle returns to the list. */}
-            <div className="mb-6 flex items-center gap-4 text-sm text-white/45">
-              <button
-                type="button"
-                onClick={leaveEditor}
-                disabled={loading}
-                aria-label="Back to all pages"
-                title="Back to all pages"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 text-lg text-white transition hover:bg-white/10"
-              >
-                ‹
-              </button>
-              <p>
-                Home › Explore › <span className="text-white">{form.title || 'Untitled'}</span>
-              </p>
-            </div>
-            <div className="grid gap-8 lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-12">
-              {/* Left: poster + more photos + host */}
-              <div className="flex flex-col gap-6">
-                <div className="group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.04]">
-                  {form.cover_image_url ? (
-                    <>
-                      <img
-                        src={form.cover_image_url}
-                        alt=""
-                        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl"
-                      />
-                      <img src={form.cover_image_url} alt="" className="relative aspect-[4/5] w-full object-contain" />
-                    </>
-                  ) : (
-                    <div className="flex aspect-[4/5] items-center justify-center text-sm text-white/40">No poster</div>
-                  )}
-                  {
-                    <div className="absolute inset-x-0 bottom-4 flex justify-center gap-2 opacity-0 transition group-hover:opacity-100">
+              Double-click text to edit, hover images for photo controls. */}
+          <div className="lp-canvas relative isolate overflow-clip rounded-3xl bg-[#080914] text-white">
+            {/* Ambient glow taken from the poster, as on the live page. */}
+            {form.cover_image_url && (
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[900px] overflow-hidden">
+                <img
+                  src={form.cover_image_url}
+                  alt=""
+                  className="h-full w-full scale-125 object-cover opacity-40 blur-[100px] saturate-150"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-[#080914]/20 via-[#080914]/70 to-[#080914]" />
+              </div>
+            )}
+
+            <div className="mx-auto w-full max-w-[1080px] px-5 pt-4 pb-10 md:px-8 md:pt-8">
+              {/* Back circle + breadcrumb, as on the live page; the circle returns to the list. */}
+              <div className="mb-4 flex min-w-0 items-center gap-2.5 text-[13px] md:mb-5">
+                <button
+                  type="button"
+                  onClick={leaveEditor}
+                  disabled={loading}
+                  aria-label="Back to all pages"
+                  title="Back to all pages"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/80 transition hover:bg-white/10 hover:text-white"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <p className="flex min-w-0 items-center gap-1.5 text-white/45">
+                  Home
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/25" />
+                  <span className="truncate font-medium text-white/85">{form.title || 'Untitled'}</span>
+                </p>
+              </div>
+
+              <div className="grid gap-8 lg:grid-cols-[380px_minmax(0,1fr)] lg:gap-14">
+                {/* Left: poster + more photos + host */}
+                <div className="flex flex-col gap-7">
+                  <div className="group relative aspect-[4/5] w-full overflow-hidden rounded-[24px] bg-[#131328] shadow-[0_30px_80px_-30px_rgb(0_0_0/0.8)] ring-1 ring-white/10">
+                    {form.cover_image_url ? (
+                      <>
+                        <img
+                          src={form.cover_image_url}
+                          alt=""
+                          className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
+                        />
+                        <img src={form.cover_image_url} alt="" className="relative block h-full w-full object-contain" />
+                      </>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm text-white/40">No poster</div>
+                    )}
+                    {form.gallery_urls.length > 0 && (
+                      <span className="absolute bottom-4 left-4 flex h-9 items-center gap-2 rounded-full bg-black/40 px-3.5 text-xs font-semibold backdrop-blur-md">
+                        1 / {(form.cover_image_url ? 1 : 0) + form.gallery_urls.length}
+                      </span>
+                    )}
+                    <div className="absolute inset-x-0 top-4 flex justify-center gap-2 opacity-0 transition group-hover:opacity-100">
                       <label className="cursor-pointer rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold backdrop-blur hover:bg-black/80">
                         {form.cover_image_url ? 'Change poster' : '+ Add poster'}
                         <input
@@ -518,136 +540,170 @@ export const LandingPagesDirectory: React.FC = () => {
                         </button>
                       )}
                     </div>
-                  }
-                </div>
+                  </div>
 
-                {
+                  {/* Editor-only: the live page shows these in the poster slider. */}
                   <div>
-                    <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">More photos</p>
+                    <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">
+                      More photos <span className="normal-case tracking-normal text-white/30">· in the poster slider</span>
+                    </p>
                     <div className="grid grid-cols-4 gap-2">
                       {form.gallery_urls.map((u) => (
                         <div key={u} className="group relative">
                           <img src={u} alt="" className="aspect-square w-full rounded-xl object-cover" />
-                          {
-                            <button
-                              type="button"
-                              aria-label="Remove photo"
-                              onClick={() =>
-                                set(
-                                  'gallery_urls',
-                                  form.gallery_urls.filter((x) => x !== u),
-                                )
-                              }
-                              className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-black/70 text-xs font-bold opacity-0 transition group-hover:opacity-100 hover:bg-rose-600"
-                            >
-                              ×
-                            </button>
-                          }
+                          <button
+                            type="button"
+                            aria-label="Remove photo"
+                            onClick={() =>
+                              set(
+                                'gallery_urls',
+                                form.gallery_urls.filter((x) => x !== u),
+                              )
+                            }
+                            className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-black/70 text-xs font-bold opacity-0 transition group-hover:opacity-100 hover:bg-rose-600"
+                          >
+                            ×
+                          </button>
                         </div>
                       ))}
-                      {
-                        <label className="flex aspect-square cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/25 text-lg text-white/60 hover:border-white/50">
-                          +
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={handleGalleryPicked}
-                            disabled={loading}
-                          />
-                        </label>
-                      }
+                      <label className="flex aspect-square cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/25 text-lg text-white/60 hover:border-white/50">
+                        +
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleGalleryPicked}
+                          disabled={loading}
+                        />
+                      </label>
                     </div>
                   </div>
-                }
 
-                <div className="lp-live">
-                  <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">Hosted by</p>
-                  <p className="text-sm text-white/60">Host of “{editing.event_title}”</p>
+                  <div className="lp-live">
+                    <p className="mb-3 text-xs font-semibold tracking-[0.14em] text-white/45 uppercase">Hosted by</p>
+                    <div className="flex items-center gap-3">
+                      <span className="h-11 w-11 shrink-0 rounded-full bg-white/10 ring-1 ring-white/15" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">Host of “{editing.event_title}”</p>
+                        <p className="truncate text-xs text-white/55">Host tagline</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold">
+                        View Profile
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Right: chips, title, when/where, about */}
-              <div className="flex min-w-0 flex-col gap-8">
-                <header>
-                  <div className="lp-live flex flex-wrap gap-2">
-                    {['Category', 'Public event', 'Rating'].map((c) => (
-                      <span
-                        key={c}
-                        className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs text-white/60"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-5">
-                    {editableText(
-                      'title',
-                      'title',
-                      'Page title',
-                      'text-[34px] leading-[1.1] font-medium tracking-[-0.02em]',
-                    )}
-                  </div>
-                  <p className="lp-live mt-5 text-[15px] text-white/60">📅 Next date · 🕒 Time · 📍 Location</p>
-                  <div className="lp-live mt-5 flex gap-2.5">
-                    {['Date', 'Date', 'Date'].map((d, i) => (
-                      <span key={i} className="rounded-2xl bg-white/[0.07] px-5 py-3 text-sm text-white/60">
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-                </header>
-
-                <section className="lp-live">
-                  <h2 className="mb-3 text-xl font-medium">Location</h2>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-sm text-white/60">
-                    📍 Event location &amp; Google Maps link
-                  </div>
-                </section>
-
-                <section>
-                  <h2 className="mb-4 text-xl font-medium">About the event</h2>
-                  <div className="mb-4">
-                    {editableText('hook', 'hook_line', 'One line that sells it (optional)', 'text-xl leading-snug')}
-                  </div>
-                  {activeField === 'content' ? (
-                    <>
-                      <RichTextEditor
-                        value={form.content}
-                        onChange={(html) => set('content', html)}
-                        placeholder="Everything about the experience: what you'll do, itinerary, what's included, FAQs..."
-                        className="lp-editor min-h-[280px]"
-                        disabled={loading}
-                        onRequestImage={requestInlineImage}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setActiveField(null)}
-                        className="mt-3 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-[#080914]"
-                      >
-                        Done
-                      </button>
-                    </>
-                  ) : (
-                    <div
-                      title="Double-click to edit"
-                      onDoubleClick={() => setActiveField('content')}
-                      className="lp-editable min-h-[60px]"
-                    >
-                      {form.content ? (
-                        <RichTextView html={form.content} className="text-[15px] leading-7" />
-                      ) : (
-                        <p className="text-[15px] text-white/40">Double-click to write about the experience…</p>
+                {/* Right: chips, title, when/where, about */}
+                <div className="flex min-w-0 flex-col gap-9">
+                  <header>
+                    <div className="lp-live flex flex-wrap items-center gap-2">
+                      {['Mood', 'Public event', 'New'].map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-5">
+                      {editableText(
+                        'title',
+                        'title',
+                        'Page title',
+                        'font-outfit text-[clamp(28px,3.4vw,42px)] leading-[1.1] font-medium tracking-[-0.02em] text-balance',
                       )}
                     </div>
-                  )}
-                </section>
+                    <ul className="lp-live mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] text-white/75">
+                      <li className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-white/50" /> Next date
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-white/50" /> Time
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-white/50" /> Location
+                      </li>
+                    </ul>
+                    <div className="lp-live mt-6 flex flex-wrap gap-2.5">
+                      {['Sat', 'Sun', 'Sat'].map((d, i) => (
+                        <span
+                          key={i}
+                          className={`flex min-w-[84px] flex-col items-center rounded-2xl px-4 py-2.5 text-[15px] leading-snug font-medium ${
+                            i === 0 ? 'bg-white text-[#080914]' : 'bg-white/[0.07]'
+                          }`}
+                        >
+                          <span className={i === 0 ? 'text-[#080914]/60' : 'text-white/60'}>{d}</span>
+                          Date
+                        </span>
+                      ))}
+                    </div>
+                  </header>
+
+                  <section className="lp-live">
+                    <h2 className="font-outfit mb-4 text-lg font-medium">Location</h2>
+                    <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+                        <MapPin className="h-5 w-5 text-[#D8B4FE]" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] leading-snug font-semibold">Event location</span>
+                        <span className="mt-0.5 block text-xs text-[#D8B4FE]">Open in Google Maps</span>
+                      </span>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h2 className="font-outfit mb-4 text-lg font-medium">About the event</h2>
+                    <div className="mb-4">
+                      {editableText(
+                        'hook',
+                        'hook_line',
+                        'One line that sells it (optional)',
+                        'font-outfit text-xl leading-snug font-normal',
+                      )}
+                    </div>
+                    {activeField === 'content' ? (
+                      <>
+                        <RichTextEditor
+                          value={form.content}
+                          onChange={(html) => set('content', html)}
+                          placeholder="Everything about the experience: what you'll do, itinerary, what's included, FAQs..."
+                          className="lp-editor min-h-[280px]"
+                          disabled={loading}
+                          onRequestImage={requestInlineImage}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setActiveField(null)}
+                          className="mt-3 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-[#080914]"
+                        >
+                          Done
+                        </button>
+                      </>
+                    ) : (
+                      <div
+                        title="Double-click to edit"
+                        onDoubleClick={() => setActiveField('content')}
+                        className="lp-editable min-h-[60px]"
+                      >
+                        {form.content ? (
+                          <RichTextView html={form.content} />
+                        ) : (
+                          <p className="text-sm text-white/40">Double-click to write about the experience…</p>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                </div>
               </div>
             </div>
 
-            <div className="mt-10 flex justify-center">{ctaBlock}</div>
-            <p className="mt-6 text-center text-xs text-white/40">
+            {/* The live page pins this pill to the bottom of the screen. */}
+            <div className="sticky bottom-0 z-10 px-5 pb-5">{ctaBlock}</div>
+            <p className="pb-6 text-center text-xs text-white/40">
               Dimmed parts come live from “{editing.event_title}” on the website — they can’t be edited here.
             </p>
           </div>

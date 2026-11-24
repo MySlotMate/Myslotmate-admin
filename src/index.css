@@ -1842,15 +1842,51 @@ body {
 
 /* Event marketing editor: the admin rich-text editor and view drawn on the
    dark landing-page canvas, so editing looks like the live page. */
+/* Body font and description styles match the live event page
+   (ExperienceDetailClient.tsx in the website). */
+.lp-canvas {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
 .lp-canvas .rich-text-content {
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 16px;
-  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
+  line-height: 1.75rem;
+}
+.lp-canvas .rich-text-content * {
+  background-color: transparent !important;
+  color: inherit !important;
 }
 .lp-canvas .rich-text-content h1,
 .lp-canvas .rich-text-content h2,
+.lp-canvas .rich-text-content h3,
+.lp-canvas .rich-text-content strong {
+  color: #fff !important;
+}
+.lp-canvas .rich-text-content h1,
+.lp-canvas .rich-text-content h2 {
+  margin-top: 1.25rem;
+  font-weight: 600;
+}
 .lp-canvas .rich-text-content h3 {
-  color: #fff;
+  margin-top: 1rem;
+  font-weight: 600;
+}
+.lp-canvas .rich-text-content p {
+  margin-top: 0.5rem;
+}
+.lp-canvas .rich-text-content li {
+  margin-top: 0.25rem;
+}
+.lp-canvas .rich-text-content ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.lp-canvas .rich-text-content ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.lp-canvas .rich-text-content a {
+  color: #b57bff !important;
 }
 .lp-canvas .lp-editor {
   background: transparent !important;
