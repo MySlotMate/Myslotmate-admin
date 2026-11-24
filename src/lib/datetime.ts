@@ -43,3 +43,9 @@ export function formatISTDateTime(iso: string): string {
     minute: '2-digit',
   }).format(new Date(iso));
 }
+
+/** This month as "YYYY-MM", in the browser's local time (for a MonthPill max). */
+export const currentMonth = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};

@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
 import { Pagination } from '../../components/ui/Pagination';
 import { toast } from '../../lib/toast';
+import { DatePill } from '../../components/event-form/DateTimePills';
 import {
   fetchPayments,
   fetchLedger,
@@ -286,19 +287,23 @@ const ActivityView: React.FC<{ onMutate: () => void }> = ({ onMutate }) => {
               </option>
             ))}
           </select>
-          <input
-            className={inputCls}
-            type="date"
-            aria-label="From"
+          <DatePill
+            allowPast
+            clearable
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            max={to || undefined}
+            placeholder="From"
+            ariaLabel="From"
+            onChange={setFrom}
           />
-          <input
-            className={inputCls}
-            type="date"
-            aria-label="To"
+          <DatePill
+            allowPast
+            clearable
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            min={from || undefined}
+            placeholder="To"
+            ariaLabel="To"
+            onChange={setTo}
           />
         </div>
       </div>
@@ -425,19 +430,23 @@ const LedgerView: React.FC = () => {
               </option>
             ))}
           </select>
-          <input
-            className={inputCls}
-            type="date"
-            aria-label="From"
+          <DatePill
+            allowPast
+            clearable
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            max={to || undefined}
+            placeholder="From"
+            ariaLabel="From"
+            onChange={setFrom}
           />
-          <input
-            className={inputCls}
-            type="date"
-            aria-label="To"
+          <DatePill
+            allowPast
+            clearable
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            min={from || undefined}
+            placeholder="To"
+            ariaLabel="To"
+            onChange={setTo}
           />
         </div>
       </div>

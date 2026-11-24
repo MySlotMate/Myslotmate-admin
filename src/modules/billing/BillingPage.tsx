@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Download, FileText, Mail, Search } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
+import { DatePill, MonthPill } from '../../components/event-form/DateTimePills';
+import { currentMonth } from '../../lib/datetime';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import {
@@ -178,14 +180,30 @@ const InvoicesTab: React.FC = () => {
             <option value="credit_note">Credit notes</option>
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+        <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           From
-          <input type="date" className={INPUT} value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+          <DatePill
+            allowPast
+            clearable
+            value={draft.from}
+            max={draft.to || undefined}
+            placeholder="Any day"
+            ariaLabel="From"
+            onChange={(v) => setDraft({ ...draft, from: v })}
+          />
+        </div>
+        <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
           To
-          <input type="date" className={INPUT} value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-        </label>
+          <DatePill
+            allowPast
+            clearable
+            value={draft.to}
+            min={draft.from || undefined}
+            placeholder="Any day"
+            ariaLabel="To"
+            onChange={(v) => setDraft({ ...draft, to: v })}
+          />
+        </div>
         <Button variant="primary" size="sm" type="submit">
           Search
         </Button>
@@ -374,10 +392,10 @@ const ReportTab: React.FC = () => {
               supply, net of credit notes. Host TCS and TDS (GSTR-8, 26Q) are in Settings → Statutory tax.
             </p>
           </div>
-          <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+          <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
             Month
-            <input type="month" className={INPUT} value={month} onChange={(e) => setMonth(e.target.value)} />
-          </label>
+            <MonthPill value={month} max={currentMonth()} onChange={setMonth} />
+          </div>
         </div>
 
         {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}
