@@ -10,6 +10,7 @@ import {
   fetchFeeDocuments,
   fetchGSTReport,
   resendFeeDocument,
+  runCommissionInvoices,
   saveBillingSettings,
   type BillingSettings,
   type BillingSettingsView,
@@ -222,12 +223,18 @@ const InvoicesTab: React.FC = () => {
                 </td>
                 <td className="py-3 pr-3 whitespace-nowrap text-slate-600">{dateIST(d.issued_at)}</td>
                 <td className="py-3 pr-3">
-                  <span className="block font-semibold text-ink">{d.buyer_name || 'Guest'}</span>
+                  <span className="block font-semibold text-ink">{d.buyer_name || (d.source_type === 'host_commission' ? 'Host' : 'Guest')}</span>
                   <span className="block text-xs text-mist">{d.buyer_email || d.buyer_phone}</span>
                 </td>
                 <td className="py-3 pr-3">
                   <span className="block text-ink">{d.event_title}</span>
-                  <span className="block text-xs text-mist">{d.source_type === 'pass' ? 'Monthly pass' : 'Booking'}</span>
+                  <span className="block text-xs text-mist">
+                    {d.source_type === 'host_commission'
+                      ? `Boost commission to host${d.buyer_gstin ? ` · GSTIN ${d.buyer_gstin}` : ''}`
+                      : d.source_type === 'pass'
+                        ? 'Monthly pass'
+                        : 'Booking'}
+                  </span>
                 </td>
                 <td className="py-3 pr-3 text-right tabular-nums">{rupees(d.taxable_cents)}</td>
                 <td className="py-3 pr-3 text-right tabular-nums">{rupees(d.cgst_cents + d.sgst_cents + d.igst_cents)}</td>
@@ -298,6 +305,8 @@ const TotalsCard: React.FC<{ title: string; t: GSTTotals; strong?: boolean }> = 
 );
 
 const CSV_TABLES: { table: GSTTable; label: string; hint: string }[] = [
+  { table: 'b2b', label: 'B2B invoices', hint: 'GSTR-1 table 4: hosts with a GSTIN' },
+  { table: 'cdnr', label: 'B2B credit notes', hint: 'GSTR-1 table 9B' },
   { table: 'b2cs', label: 'B2C (small)', hint: 'GSTR-1 table 7' },
   { table: 'hsn', label: 'HSN / SAC summary', hint: 'GSTR-1 table 12' },
   { table: 'docs', label: 'Documents issued', hint: 'GSTR-1 table 13' },
@@ -319,6 +328,27 @@ const ReportTab: React.FC = () => {
       })
       .catch((e) => setError(errText(e, 'Could not load the report.')));
   }, [month]);
+
+  const [running, setRunning] = useState(false);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
+  const runNow = async () => {
+    if (!window.confirm(`Issue Boost commission invoices for ${month}? Invoice numbers can't be reused.`)) return;
+    setRunning(true);
+    setRunMsg(null);
+    try {
+      const r = await runCommissionInvoices(month);
+      setRunMsg(
+        r.skipped
+          ? `Nothing issued: ${r.skipped}`
+          : `Issued ${r.invoices} invoice${r.invoices === 1 ? '' : 's'} and ${r.credit_notes} credit note${r.credit_notes === 1 ? '' : 's'}.`,
+      );
+      setRep(await fetchGSTReport(month));
+    } catch (e) {
+      setRunMsg(errText(e, 'Could not issue the invoices.'));
+    } finally {
+      setRunning(false);
+    }
+  };
 
   const download = async (table: GSTTable) => {
     setBusy(table);
@@ -356,9 +386,30 @@ const ReportTab: React.FC = () => {
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <TotalsCard title="Invoices" t={rep.invoices} />
             <TotalsCard title="Credit notes" t={rep.credit_notes} />
-            <TotalsCard title="Net fee revenue" t={rep.net} strong />
+            <TotalsCard title="Net revenue" t={rep.net} strong />
           </div>
         )}
+        {rep && (
+          <p className="mt-2 text-xs text-mist">
+            Of the net: guest platform fees {rupees(rep.fee_net.total_cents)} · Boost commission{' '}
+            {rupees(rep.boost_net.total_cents)} (GST {rupees(rep.boost_net.cgst_cents + rep.boost_net.sgst_cents + rep.boost_net.igst_cents)}).
+          </p>
+        )}
+
+        <div className="mt-6 rounded-xl border border-slate-200 p-4">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Boost commission invoices</h4>
+          <p className="mt-1 text-xs text-mist">
+            Issued automatically after each month ends, one per host with boosted sales, plus credit notes for
+            invoiced bookings refunded since. Run it now for the month above if needed; it skips anything already
+            invoiced.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button variant="outline" size="sm" type="button" disabled={running || !month} onClick={() => void runNow()}>
+              {running ? 'Issuing…' : `Issue for ${month}`}
+            </Button>
+            {runMsg && <span className="text-xs font-semibold text-slate-600">{runMsg}</span>}
+          </div>
+        </div>
 
         <div className="mt-6">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Download CSV</h4>
@@ -379,6 +430,45 @@ const ReportTab: React.FC = () => {
           </div>
         </div>
       </Card>
+
+      {rep && (rep.b2b.length > 0 || rep.cdnr.length > 0) && (
+        <Card className="p-6">
+          <h4 className="text-sm font-bold text-ink">B2B · hosts with a GSTIN</h4>
+          <p className="mt-0.5 text-xs text-mist">Boost commission invoices and credit notes to GST-registered hosts.</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className={th}>GSTIN</th>
+                  <th className={th}>Number</th>
+                  <th className={th}>Date</th>
+                  <th className={th}>Place of supply</th>
+                  <th className={`${th} text-right`}>Taxable</th>
+                  <th className={`${th} text-right`}>Tax</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...rep.b2b, ...rep.cdnr].map((r) => (
+                  <tr key={r.number} className="border-b border-slate-100">
+                    <td className="py-2 pr-3">
+                      <span className="block font-semibold text-ink">{r.gstin}</span>
+                      <span className="block text-xs text-mist">{r.name}</span>
+                    </td>
+                    <td className={td}>
+                      {r.number}
+                      {r.kind === 'credit_note' && <span className="block text-xs text-mist">against {r.against}</span>}
+                    </td>
+                    <td className={td}>{new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })}</td>
+                    <td className="py-2 pr-3">{r.state_name || r.place_of_supply}</td>
+                    <td className={`${td} text-right`}>{rupees(r.taxable_cents)}</td>
+                    <td className={`${td} text-right`}>{rupees(r.cgst_cents + r.sgst_cents + r.igst_cents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {rep && (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -559,6 +649,8 @@ const SettingsTab: React.FC = () => {
           {field('Invoice prefix', 'invoice_prefix', 'e.g. F/2627/0000001')}
           {field('Credit note prefix', 'credit_note_prefix', 'e.g. C/2627/0000001')}
         </div>
+        {field('Boost commission SAC code', 'commission_sac_code', 'Needed before commission invoices go out. Confirm with the CA.')}
+        {field('Commission invoice prefix', 'commission_invoice_prefix', 'e.g. M/2627/0000001')}
       </div>
 
       <label className="mt-6 flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-3">

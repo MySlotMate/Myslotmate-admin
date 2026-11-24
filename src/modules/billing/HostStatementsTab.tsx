@@ -74,6 +74,7 @@ export const HostStatementsTab: React.FC = () => {
         ['Ticket sales', rupees(t.ticket_cents)],
         ['Refunded or cancelled', minus(t.refunded_cents)],
         ['MySlotMate commission', minus(t.commission_cents)],
+        ['Marketing Boost commission', minus(t.boost_commission_cents)],
         ['TCS withheld', minus(t.tcs_cents)],
         ['TDS withheld', minus(t.tds_cents)],
         ['Earned this month', rupees(t.payable_cents), true],

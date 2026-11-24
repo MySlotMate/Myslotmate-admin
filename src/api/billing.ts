@@ -15,6 +15,8 @@ export interface BillingSettings {
   gst_rate_bps: number;
   invoice_prefix: string;
   credit_note_prefix: string;
+  commission_invoice_prefix: string;
+  commission_sac_code: string;
   updated_at?: string;
 }
 
@@ -30,7 +32,9 @@ export interface FeeDocument {
   number: string;
   fy: string;
   issued_at: string;
-  source_type: 'booking' | 'pass';
+  source_type: 'booking' | 'pass' | 'host_commission';
+  period?: string;
+  buyer_gstin?: string;
   source_id: string;
   event_title: string;
   original_number?: string;
@@ -55,11 +59,27 @@ export interface GSTTotals {
   total_cents: number;
 }
 
+export interface B2BRow extends GSTTotals {
+  kind: 'invoice' | 'credit_note';
+  gstin: string;
+  name: string;
+  number: string;
+  date: string;
+  against?: string;
+  place_of_supply: string;
+  state_name: string;
+  rate_bps: number;
+}
+
 export interface GSTReport {
   month: string;
   invoices: GSTTotals;
   credit_notes: GSTTotals;
   net: GSTTotals;
+  fee_net: GSTTotals;
+  boost_net: GSTTotals;
+  b2b: B2BRow[];
+  cdnr: B2BRow[];
   b2cs: (GSTTotals & { place_of_supply: string; state_name: string; rate_bps: number })[];
   sac: (GSTTotals & { sac_code: string; rate_bps: number; quantity: number })[];
   documents: { nature: string; first: string; last: string; count: number }[];
@@ -97,7 +117,7 @@ export const resendFeeDocument = (id: string, email?: string) =>
 export const fetchGSTReport = (month: string) =>
   apiFetch<GSTReport>(`/admin/billing/reports/gst?month=${encodeURIComponent(month)}`);
 
-export type GSTTable = 'b2cs' | 'hsn' | 'docs' | 'register';
+export type GSTTable = 'b2cs' | 'b2b' | 'cdnr' | 'hsn' | 'docs' | 'register';
 
 export const downloadGSTTable = (month: string, table: GSTTable) =>
   apiDownload(
@@ -133,6 +153,7 @@ export interface HostStatement {
     commission_cents: number;
     tcs_cents: number;
     tds_cents: number;
+    boost_commission_cents: number;
     payable_cents: number;
     paid_out_cents: number;
     in_flight_cents: number;
@@ -149,3 +170,14 @@ export const downloadHostStatement = (hostId: string, month: string, hostName: s
     `/billing/host-statement?host_id=${encodeURIComponent(hostId)}&month=${encodeURIComponent(month)}&format=pdf`,
     `MySlotMate-statement-${month}-${hostName.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`,
   );
+
+export interface CommissionRunResult {
+  month: string;
+  invoices: number;
+  credit_notes: number;
+  skipped?: string;
+}
+
+/** Issue a month's Boost commission invoices (and pending credit notes) now. */
+export const runCommissionInvoices = (month: string) =>
+  apiFetch<CommissionRunResult>('/admin/billing/commission-run', { method: 'POST', body: { month } });
