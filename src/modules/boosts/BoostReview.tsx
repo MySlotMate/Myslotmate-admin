@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import {
   commissionCents,
+  acceptBoostForHost,
   declineBoost,
   endBoost,
   fetchBoost,
@@ -40,12 +41,19 @@ const ACTION_LABEL: Record<string, string> = {
   started_by_admin: 'Started from the admin',
   proposed: 'Proposal sent',
   accepted: 'Host accepted',
+  accepted_for_host: 'Accepted for the host by the team',
   went_live: 'Went live',
   stopped: 'Host stopped it',
   ended: 'Ended',
   declined: 'Declined',
   cancelled: 'Host withdrew',
   campaign: 'Campaign numbers logged',
+};
+
+/** The note an admin gave when accepting for the host, from a log entry's details. */
+const howAgreed = (details: unknown): string | null => {
+  const v = (details as { how_agreed?: unknown } | null)?.how_agreed;
+  return typeof v === 'string' && v ? v : null;
 };
 
 interface Draft {
@@ -119,6 +127,11 @@ export const BoostReview: React.FC = () => {
   const s = statusBadge(d);
   const canPropose = d.status === 'under_review' || d.status === 'quote_ready';
   const accepted = d.status === 'quote_ready' && !!d.accepted_at;
+  const lastAccept = d.log
+    .filter((e) => e.action === 'accepted' || e.action === 'accepted_for_host')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .pop();
+  const acceptedByTeam = lastAccept?.action === 'accepted_for_host';
   const setRate = (key: string, patch: Partial<{ bps: number; reason: string }>) =>
     setDraft({ ...draft, rates: { ...draft.rates, [key]: { ...draft.rates[key], ...patch } } });
 
@@ -147,6 +160,14 @@ export const BoostReview: React.FC = () => {
     const reason = window.prompt('Why are we declining? The host sees this.');
     if (!reason?.trim()) return;
     void run('Declined.', () => declineBoost(d.id, reason.trim()));
+  };
+
+  const acceptForHost = () => {
+    const how = window.prompt(
+      'How did the host agree to this proposal? For example: "On a call with the host, 26 Nov". This is saved, and the host gets an email that we accepted for them.',
+    );
+    if (!how?.trim()) return;
+    void run('Accepted for the host. Go live when the ads start.', () => acceptBoostForHost(d.id, how.trim()));
   };
 
   const goLive = () => {
@@ -391,7 +412,7 @@ export const BoostReview: React.FC = () => {
           {accepted ? (
             <>
               <p className="mt-0.5 text-xs text-mist">
-                The host accepted on {dateTimeIST(d.accepted_at)}. Go live when the ads start; commission applies to
+                {acceptedByTeam ? 'Accepted for the host' : 'The host accepted'} on {dateTimeIST(d.accepted_at)}. Go live when the ads start; commission applies to
                 tickets sold from then until the end time
                 {d.event.schedule_type === 'one_time' ? ' (or the event start, whichever is first)' : ''}.
               </p>
@@ -407,7 +428,14 @@ export const BoostReview: React.FC = () => {
               </div>
             </>
           ) : (
-            <p className="mt-1 text-sm text-mist">Waiting for the host to accept the proposal.</p>
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-mist">
+                Waiting for the host to accept the proposal. If they agreed with us directly, accept it for them.
+              </p>
+              <Button variant="outline" size="sm" type="button" disabled={busy} onClick={acceptForHost}>
+                Accept for the host
+              </Button>
+            </div>
           )}
         </Card>
       )}
@@ -489,6 +517,9 @@ export const BoostReview: React.FC = () => {
                 {ACTION_LABEL[e.action] ?? e.action}
                 {e.actor_kind === 'admin' && e.actor ? <span className="text-mist"> · {e.actor}</span> : null}
                 {e.actor_kind === 'system' ? <span className="text-mist"> · automatic</span> : null}
+                {e.action === 'accepted_for_host' && howAgreed(e.details) ? (
+                  <span className="block text-xs text-mist">How the host agreed: {howAgreed(e.details)}</span>
+                ) : null}
               </span>
               <span className="text-xs text-mist">{dateTimeIST(e.created_at)}</span>
             </li>
