@@ -109,6 +109,10 @@ export interface ProposalPayload {
 export const proposeBoost = (id: string, p: ProposalPayload) =>
   apiFetch<Boost>(`/admin/boosts/${id}/proposal`, { method: 'PUT', body: p });
 
+/** Accepts the open proposal for the host, who agreed off the website. howAgreed is kept in the log and emailed to the host. */
+export const acceptBoostForHost = (id: string, howAgreed: string) =>
+  apiFetch<Boost>(`/admin/boosts/${id}/accept`, { method: 'POST', body: { how_agreed: howAgreed } });
+
 export const declineBoost = (id: string, reason: string) =>
   apiFetch<Boost>(`/admin/boosts/${id}/decline`, { method: 'POST', body: { reason } });
 
