@@ -2,17 +2,61 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { fetchBoosts, type Boost } from '../../api/boosts';
+import { Button } from '../../components/ui/Button';
+import { BOOST_CHANNELS, fetchBoosts, startBoost, type Boost } from '../../api/boosts';
+import { searchMarketingEvents, type MarketingEventOption } from '../../api/landingPages';
 import { dateTimeIST, pct, rupees, statusBadge, tabOf, TABS, type Tab } from './format';
 
 // Event Boost queue: requests from hosts, open proposals, accepted ones
-// waiting to go live, live campaigns and finished ones.
+// waiting to go live, live campaigns and finished ones. "Boost an event" opens
+// one on any host's event; it joins the queue as a new request.
+
+const inputCls =
+  'w-full rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-brand-400';
 
 export const BoostsQueue: React.FC = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState<Boost[] | null>(null);
   const [tab, setTab] = useState<Tab>('new');
   const [error, setError] = useState<string | null>(null);
+
+  // "Boost an event" picker: lists events right away, search narrows it.
+  const [picking, setPicking] = useState(false);
+  const [eventQuery, setEventQuery] = useState('');
+  const [eventResults, setEventResults] = useState<MarketingEventOption[]>([]);
+  const [channels, setChannels] = useState<string[]>(['instagram', 'facebook']);
+  const [starting, setStarting] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!picking) return;
+    const t = setTimeout(() => {
+      searchMarketingEvents(eventQuery.trim() || undefined)
+        .then((res) => setEventResults(res.items))
+        .catch(() => setEventResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [picking, eventQuery]);
+
+  const togglePicker = () => {
+    setPicking((v) => !v);
+    setStartError(null);
+  };
+
+  const toggleChannel = (key: string) =>
+    setChannels((cur) => (cur.includes(key) ? cur.filter((c) => c !== key) : [...cur, key]));
+
+  const handleStart = async (evt: MarketingEventOption) => {
+    setStarting(evt.id);
+    setStartError(null);
+    try {
+      const b = await startBoost(evt.id, channels);
+      navigate(`/boosts/${b.id}`);
+    } catch (e) {
+      setStartError(`${evt.title}: ${e instanceof Error ? e.message : 'Could not start the Boost.'}`);
+      setStarting(null);
+    }
+  };
 
   useEffect(() => {
     fetchBoosts()
@@ -29,16 +73,86 @@ export const BoostsQueue: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">
-          Event Boost
-        </p>
-        <p className="mt-2 max-w-3xl text-sm text-mist">
-          Hosts ask to promote one event. Send a proposal per ticket type (the host guide&apos;s rate, or 12–20% for
-          tickets of ₹1,000+ with a reason); once the host accepts, go live when the ads start. Commission applies only
-          to tickets sold while live. Invite pilot hosts from their profile.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-brand-700">
+            Event Boost
+          </p>
+          <p className="mt-2 max-w-3xl text-sm text-mist">
+            Hosts ask to promote one event, or you boost one yourself. Send a proposal per ticket type (the host
+            guide&apos;s rate, or 12–20% for tickets of ₹1,000+ with a reason); once the host accepts, go live when the
+            ads start. Commission applies only to tickets sold while live. Invite pilot hosts from their profile.
+          </p>
+        </div>
+        <Button variant={picking ? 'secondary' : 'primary'} onClick={togglePicker} disabled={starting !== null}>
+          {picking ? 'Cancel' : 'Boost an event'}
+        </Button>
       </div>
+
+      {picking && (
+        <Card className="p-5 bg-white/95">
+          <p className="mb-2 text-xs font-bold text-slate-600">
+            Where to promote it
+            <span className="ml-2 font-normal text-slate-400">You can change the plan with the host later.</span>
+          </p>
+          <div className="mb-5 flex flex-wrap gap-2">
+            {BOOST_CHANNELS.map((ch) => {
+              const on = channels.includes(ch.key);
+              return (
+                <button
+                  key={ch.key}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => toggleChannel(ch.key)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                    on
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : 'border-brand-100 bg-white text-slate-600 hover:border-brand-400'
+                  }`}
+                >
+                  {ch.label}
+                </button>
+              );
+            })}
+          </div>
+          <label className="mb-2 block text-xs font-bold text-slate-600">
+            Select an event
+            <span className="ml-2 font-normal text-slate-400">
+              It joins the queue as a new request. The host accepts your proposal before anything goes live.
+            </span>
+          </label>
+          <input
+            className={inputCls}
+            type="search"
+            placeholder="Search experiences by title..."
+            value={eventQuery}
+            onChange={(e) => setEventQuery(e.target.value)}
+          />
+          {startError && <p className="mt-3 text-sm font-semibold text-rose-600">{startError}</p>}
+          {eventResults.length === 0 && <p className="mt-3 text-sm text-slate-400">No events found.</p>}
+          {eventResults.length > 0 && (
+            <ul className="mt-3 divide-y divide-slate-100 rounded-2xl border border-brand-100">
+              {eventResults.map((evt) => (
+                <li key={evt.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-ink">{evt.title}</p>
+                    <p className="text-xs text-slate-500">
+                      {evt.hostName} · {evt.city || 'Online'} · {evt.status}
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    onClick={() => handleStart(evt)}
+                    disabled={starting !== null || channels.length === 0}
+                  >
+                    {starting === evt.id ? 'Starting…' : 'Boost'}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200" role="tablist">
         {TABS.map((t) => (

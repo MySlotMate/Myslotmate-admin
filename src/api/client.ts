@@ -129,6 +129,10 @@ function unwrap<T>(parsed: unknown): T {
 function extractMessage(parsed: unknown): string | null {
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as { error?: unknown; message?: unknown };
+    // Some routes (Boost, billing) send a short code in `error` and the
+    // readable text in `message`; show the text, not the code.
+    const isCode = typeof obj.error === 'string' && /^[a-z0-9_]+$/.test(obj.error);
+    if (isCode && typeof obj.message === 'string' && obj.message) return obj.message;
     if (typeof obj.error === 'string' && obj.error) return obj.error;
     if (typeof obj.message === 'string' && obj.message) return obj.message;
   }
