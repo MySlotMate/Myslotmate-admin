@@ -85,6 +85,18 @@ export const fetchBoosts = (status: BoostStatus | '' = '') =>
     `/admin/boosts/${status ? `?status=${status}` : ''}`,
   );
 
+/** Opens a Boost on any event, as if its host had asked; the proposal is sent from its review page. */
+export const startBoost = (eventId: string, channels: string[]) =>
+  apiFetch<Boost>('/admin/boosts/', { method: 'POST', body: { event_id: eventId, channels } });
+
+export const BOOST_CHANNELS: { key: string; label: string }[] = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'google', label: 'Google' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'influencers', label: 'Influencers' },
+];
+
 export const fetchBoost = (id: string) => apiFetch<BoostDetail>(`/admin/boosts/${id}`);
 
 export interface ProposalPayload {

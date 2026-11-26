@@ -37,6 +37,7 @@ const fromLocal = (v: string) => (v ? new Date(`${v}:00+05:30`).toISOString() : 
 
 const ACTION_LABEL: Record<string, string> = {
   requested: 'Host requested a Boost',
+  started_by_admin: 'Started from the admin',
   proposed: 'Proposal sent',
   accepted: 'Host accepted',
   went_live: 'Went live',
