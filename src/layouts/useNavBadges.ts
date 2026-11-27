@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { fetchBoosts } from '../api/boosts';
 import { fetchPendingApplications } from '../api/hosts';
 import { listJoinRequests } from '../api/joinRequests';
+import { BOOST_PLAN_ENABLED, boostPlanApi } from '../api/boostPlan';
 
 /**
  * Sidebar counts: how many things need the team's attention on a tab since it
@@ -12,14 +13,15 @@ import { listJoinRequests } from '../api/joinRequests';
  *   Boosts             new requests, and proposals the host just accepted (ready to go live)
  *   Host applications  pending applications submitted since
  *   Join requests      pending requests made since
+ *   Premium hosts      Premium applications made since (paid-budget Boost only)
  *
  * Read from the same admin endpoints the tabs use; refreshed every minute.
  */
 
-export type BadgePath = '/boosts' | '/host-applications' | '/join-requests';
+export type BadgePath = '/boosts' | '/host-applications' | '/join-requests' | '/premium';
 export type NavBadges = Partial<Record<BadgePath, number>>;
 
-const PATHS: BadgePath[] = ['/boosts', '/host-applications', '/join-requests'];
+const PATHS: BadgePath[] = ['/boosts', '/host-applications', '/join-requests', '/premium'];
 const REFRESH_MS = 60_000;
 const seenKey = (path: BadgePath) => `msm_admin_seen:${path}`;
 
@@ -44,10 +46,11 @@ const openTab = (path: string) => PATHS.find((p) => path === p || path.startsWit
 const after = (iso: string | null | undefined, seen: number) => Boolean(iso) && Date.parse(iso as string) > seen;
 
 async function countNew(): Promise<NavBadges> {
-  const [boosts, apps, joins] = await Promise.allSettled([
+  const [boosts, apps, joins, premium] = await Promise.allSettled([
     fetchBoosts(''),
     fetchPendingApplications(),
     listJoinRequests({ status: 'pending', limit: 200 }),
+    BOOST_PLAN_ENABLED ? boostPlanApi.listPremium('applied') : Promise.resolve({ items: [] }),
   ]);
   const out: NavBadges = {};
   if (boosts.status === 'fulfilled') {
@@ -65,6 +68,10 @@ async function countNew(): Promise<NavBadges> {
   if (joins.status === 'fulfilled') {
     const seen = readSeen('/join-requests');
     out['/join-requests'] = (joins.value ?? []).filter((j) => after(j.created_at, seen)).length;
+  }
+  if (premium.status === 'fulfilled') {
+    const seen = readSeen('/premium');
+    out['/premium'] = premium.value.items.filter((m) => after(m.applied_at, seen)).length;
   }
   return out;
 }

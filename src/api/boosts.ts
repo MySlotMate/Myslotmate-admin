@@ -32,6 +32,11 @@ export interface Boost {
   planned_from: string | null;
   planned_until: string | null;
   accepted_at: string | null;
+  /** Paid-budget Boost fields, when the backend serves them (PRD: Premium Hosts and paid Boost marketing). */
+  budget_status?: 'unpaid' | 'paid' | 'not_required';
+  budget_total_cents?: number;
+  spent_cents?: number;
+  closed_at?: string | null;
   live_from: string | null;
   live_until: string | null;
   ended_reason: string | null;
@@ -86,8 +91,11 @@ export const fetchBoosts = (status: BoostStatus | '' = '') =>
   );
 
 /** Opens a Boost on any event, as if its host had asked; the proposal is sent from its review page. */
-export const startBoost = (eventId: string, channels: string[]) =>
-  apiFetch<Boost>('/admin/boosts/', { method: 'POST', body: { event_id: eventId, channels } });
+export const startBoost = (
+  eventId: string,
+  channels: string[],
+  plan?: { daily_budget_cents: number; budget_from: string; budget_until: string },
+) => apiFetch<Boost>('/admin/boosts/', { method: 'POST', body: { event_id: eventId, channels, ...plan } });
 
 export const BOOST_CHANNELS: { key: string; label: string }[] = [
   { key: 'instagram', label: 'Instagram' },
@@ -104,6 +112,10 @@ export interface ProposalPayload {
   note?: string;
   planned_from?: string | null;
   planned_until?: string | null;
+  /** Paid-budget Boost: the final budget plan (PRD: Premium Hosts and paid Boost marketing). */
+  daily_budget_cents?: number;
+  budget_from?: string;
+  budget_until?: string;
 }
 
 export const proposeBoost = (id: string, p: ProposalPayload) =>

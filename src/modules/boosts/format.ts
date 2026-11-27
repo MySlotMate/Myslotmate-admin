@@ -21,11 +21,12 @@ export const dateTimeIST = (iso: string | null) =>
       })
     : '—';
 
-export type Tab = 'new' | 'proposed' | 'accepted' | 'live' | 'ended' | 'closed';
+export type Tab = 'new' | 'proposed' | 'payment' | 'accepted' | 'live' | 'ended' | 'closed';
 
 export const TABS: { key: Tab; label: string; hint: string }[] = [
   { key: 'new', label: 'New', hint: 'Waiting for a proposal' },
   { key: 'proposed', label: 'Proposed', hint: 'Waiting for the host to accept' },
+  { key: 'payment', label: 'Awaiting payment', hint: 'Accepted; the ad budget isn’t paid yet' },
   { key: 'accepted', label: 'Accepted', hint: 'Ready to go live' },
   { key: 'live', label: 'Live', hint: 'Commission on tickets sold now' },
   { key: 'ended', label: 'Ended', hint: '' },
@@ -37,7 +38,8 @@ export const tabOf = (b: Boost): Tab => {
     case 'under_review':
       return 'new';
     case 'quote_ready':
-      return b.accepted_at ? 'accepted' : 'proposed';
+      if (!b.accepted_at) return 'proposed';
+      return b.budget_status === 'unpaid' ? 'payment' : 'accepted';
     case 'live':
       return 'live';
     case 'ended':
@@ -53,12 +55,14 @@ export const statusBadge = (b: Boost): { label: string; color: BadgeColor } => {
       return { label: 'New', color: 'amber' };
     case 'proposed':
       return { label: 'Proposed', color: 'blue' };
+    case 'payment':
+      return { label: 'Awaiting payment', color: 'amber' };
     case 'accepted':
       return { label: 'Accepted', color: 'indigo' };
     case 'live':
       return { label: 'Live', color: 'green' };
     case 'ended':
-      return { label: 'Ended', color: 'slate' };
+      return { label: b.closed_at === null ? 'To close' : 'Ended', color: 'slate' };
     default:
       return { label: b.status === 'declined' ? 'Declined' : 'Cancelled', color: 'rose' };
   }

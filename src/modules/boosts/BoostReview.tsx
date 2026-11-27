@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Check } from 'lucide-react';
-import { DateTimePill } from '../../components/event-form/DateTimePills';
+import { DatePill, DateTimePill } from '../../components/event-form/DateTimePills';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -19,6 +19,8 @@ import {
   type BoostRate,
 } from '../../api/boosts';
 import { dateTimeIST, pct, rupees, statusBadge } from './format';
+import { BOOST_PLAN_ENABLED, boostPlanApi, daysBetween, goLiveBlocker, gstOn, type PlanState } from '../../api/boostPlan';
+import { BoostPlanPanel } from './BoostPlanPanel';
 
 // One Boost: the request, the proposal form, go-live and the campaign.
 
@@ -86,6 +88,9 @@ export const BoostReview: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [liveUntil, setLiveUntil] = useState('');
   const [campaign, setCampaign] = useState({ reach: '', clicks: '' });
+  // Paid-budget Boost: the plan and its work (payments, creatives, spend, reports).
+  const [plan, setPlan] = useState<PlanState | null>(null);
+  const [budget, setBudget] = useState({ daily: '', from: '', until: '' });
 
   const load = useCallback(
     () =>
@@ -96,6 +101,15 @@ export const BoostReview: React.FC = () => {
           setLiveUntil(toLocal(x.planned_until));
           setCampaign({ reach: String(x.reach || ''), clicks: String(x.clicks || '') });
           setError(null);
+          if (BOOST_PLAN_ENABLED)
+            return boostPlanApi.getPlan(x).then((p) => {
+              setPlan(p);
+              setBudget({
+                daily: p.daily_budget_cents ? String(p.daily_budget_cents / 100) : '',
+                from: p.budget_from ?? '',
+                until: p.budget_until ?? '',
+              });
+            });
         })
         .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the Boost.')),
     [id],
@@ -142,6 +156,15 @@ export const BoostReview: React.FC = () => {
     })
     .filter(Boolean) as string[];
 
+  const usesBudget = BOOST_PLAN_ENABLED && plan?.pricing_model === 'budget';
+  const dailyCents = Math.round((Number(budget.daily) || 0) * 100);
+  const budgetDays = budget.from && budget.until ? daysBetween(budget.from, budget.until) : 0;
+  if (usesBudget) {
+    if (dailyCents < 50_000) problems.push('Set a daily ad budget of at least ₹500.');
+    if (budgetDays < 3) problems.push('Run the budget for at least 3 days.');
+  }
+  const liveBlocker = goLiveBlocker(plan);
+
   const sendProposal = () =>
     run(accepted ? 'New proposal sent. The host has to accept it again.' : 'Proposal sent to the host.', () =>
       proposeBoost(d.id, {
@@ -153,6 +176,13 @@ export const BoostReview: React.FC = () => {
         note: draft.note.trim() || undefined,
         planned_from: fromLocal(draft.from),
         planned_until: fromLocal(draft.until),
+        ...(usesBudget
+          ? { daily_budget_cents: dailyCents, budget_from: budget.from, budget_until: budget.until }
+          : {}),
+      }).then(async (r) => {
+        if (usesBudget)
+          await boostPlanApi.savePlan(d.id, { daily_budget_cents: dailyCents, budget_from: budget.from, budget_until: budget.until });
+        return r;
       }),
     );
 
@@ -360,6 +390,37 @@ export const BoostReview: React.FC = () => {
             </table>
           </div>
 
+          {usesBudget && (
+            <div className="mt-4 grid gap-4 rounded-xl border border-brand-100 bg-brand-50/40 p-4 md:grid-cols-4">
+              <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                Daily ad budget (₹)
+                <input
+                  className={INPUT}
+                  type="number"
+                  min={500}
+                  step={100}
+                  value={budget.daily}
+                  disabled={busy}
+                  onChange={(e) => setBudget({ ...budget, daily: e.target.value })}
+                />
+              </label>
+              <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                Ads from
+                <DatePill value={budget.from} onChange={(v) => setBudget({ ...budget, from: v })} allowPast disabled={busy} ariaLabel="Ads from" />
+              </div>
+              <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                Ads until
+                <DatePill value={budget.until} onChange={(v) => setBudget({ ...budget, until: v })} min={budget.from || undefined} disabled={busy} ariaLabel="Ads until" />
+              </div>
+              <div className="flex flex-col justify-end text-xs text-slate-600">
+                <span>
+                  {budgetDays} days · {rupees(dailyCents * budgetDays)}
+                </span>
+                <span className="font-bold text-ink">Host pays {rupees(dailyCents * budgetDays + gstOn(dailyCents * budgetDays))} with GST</span>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600 md:col-span-3">
               Note to the host
@@ -406,6 +467,8 @@ export const BoostReview: React.FC = () => {
         </Card>
       )}
 
+      {plan && <BoostPlanPanel d={d} plan={plan} busy={busy} run={run} />}
+
       {d.status === 'quote_ready' && (
         <Card className="p-6">
           <h3 className="text-lg font-bold text-ink">Go live</h3>
@@ -422,7 +485,8 @@ export const BoostReview: React.FC = () => {
                   Ends (IST, optional)
                   <DateTimePill label="Ends" clearable value={liveUntil} disabled={busy} onChange={setLiveUntil} />
                 </div>
-                <Button variant="primary" size="sm" type="button" disabled={busy} onClick={goLive}>
+                {liveBlocker && <p className="text-xs font-semibold text-amber-700">{liveBlocker}</p>}
+                <Button variant="primary" size="sm" type="button" disabled={busy || !!liveBlocker} onClick={goLive}>
                   Go live
                 </Button>
               </div>
