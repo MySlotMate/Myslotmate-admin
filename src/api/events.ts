@@ -148,7 +148,8 @@ export interface EventDetail {
   end_time: string | null;
   is_online: boolean;
   location: string | null;
-  meeting_link: string | null;
+  // Never sent with the event any more; read it with fetchEventJoinLink.
+  meeting_link?: string | null;
   google_maps_url: string | null;
   duration_minutes: number | null;
   min_group_size: number | null;
@@ -185,6 +186,13 @@ export interface EventDetail {
 export function fetchEventDetail(eventId: string, hostId?: string): Promise<EventDetail> {
   const qs = hostId ? `?host_id=${encodeURIComponent(hostId)}` : '';
   return apiFetch<EventDetail>(`/events/${eventId}${qs}`);
+}
+
+// GET /events/{id}/join — an online event's meeting link. The event itself never
+// carries it; admins, the host and booked guests may read it here.
+export async function fetchEventJoinLink(eventId: string): Promise<string> {
+  const res = await apiFetch<{ meeting_link: string } | null>(`/events/${eventId}/join`);
+  return res?.meeting_link ?? '';
 }
 
 export function publishEvent(eventId: string, hostId: string): Promise<CreatedEvent> {
