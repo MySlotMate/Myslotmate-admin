@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { BOOST_PLAN_ENABLED } from '../api/boostPlan';
 import {
   LayoutDashboard,
+  Crown,
   Users,
   UserCheck,
   ClipboardCheck,
@@ -47,6 +49,7 @@ const SECTIONS = [
       { name: 'Bookings', path: '/bookings', icon: CalendarDays },
       { name: 'Join requests', path: '/join-requests', icon: Inbox },
       { name: 'Boosts', path: '/boosts', icon: Rocket },
+      ...(BOOST_PLAN_ENABLED ? [{ name: 'Premium hosts', path: '/premium', icon: Crown }] : []),
       { name: 'Payments', path: '/payments', icon: CreditCard },
       { name: 'Billing', path: '/billing', icon: Receipt },
     ],

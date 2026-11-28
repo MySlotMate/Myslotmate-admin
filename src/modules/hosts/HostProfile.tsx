@@ -14,6 +14,8 @@ import type { HostApplicationStatus } from '../../types';
 import { APPLICATION_STATUSES, STATUS_LABELS, statusColor } from './hostStatus';
 import { EditHostProfileModal } from './EditHostProfileModal';
 import { BoostInviteCard } from '../boosts/BoostInviteCard';
+import { PremiumHostCard } from '../premium/PremiumHostCard';
+import { BOOST_PLAN_ENABLED } from '../../api/boostPlan';
 
 type Tab = 'details' | 'events' | 'earnings';
 
@@ -388,7 +390,12 @@ export const HostProfile: React.FC = () => {
         {feeError && <p className="mt-3 text-sm font-semibold text-rose-600">{feeError}</p>}
       </Card>
 
-      {hostId && <BoostInviteCard hostId={hostId} />}
+      {hostId &&
+        (BOOST_PLAN_ENABLED ? (
+          <PremiumHostCard hostId={hostId} hostName={fullName} />
+        ) : (
+          <BoostInviteCard hostId={hostId} />
+        ))}
 
       {/* Auto payout */}
       <Card className="p-6">

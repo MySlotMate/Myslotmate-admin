@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { BOOST_CHANNELS, fetchBoosts, startBoost, type Boost } from '../../api/boosts';
+import { BOOST_PLAN_ENABLED, boostPlanApi, daysBetween, gstOn } from '../../api/boostPlan';
+import { DatePill } from '../../components/event-form/DateTimePills';
 import { searchMarketingEvents, type MarketingEventOption } from '../../api/landingPages';
 import { dateTimeIST, pct, rupees, statusBadge, tabOf, TABS, type Tab } from './format';
 
@@ -27,6 +29,14 @@ export const BoostsQueue: React.FC = () => {
   const [channels, setChannels] = useState<string[]>(['instagram', 'facebook']);
   const [starting, setStarting] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  // Paid-budget Boost: the ad budget plan to propose.
+  const [plan, setPlan] = useState(() => {
+    const d = (n: number) => new Date(Date.now() + 5.5 * 3600 * 1000 + n * 86_400_000).toISOString().slice(0, 10);
+    return { daily: '1000', from: d(1), until: d(7) };
+  });
+  const dailyCents = Math.round((Number(plan.daily) || 0) * 100);
+  const planDays = plan.from && plan.until ? daysBetween(plan.from, plan.until) : 0;
+  const planOk = !BOOST_PLAN_ENABLED || (dailyCents >= 50_000 && planDays >= 3);
 
   useEffect(() => {
     if (!picking) return;
@@ -50,7 +60,11 @@ export const BoostsQueue: React.FC = () => {
     setStarting(evt.id);
     setStartError(null);
     try {
-      const b = await startBoost(evt.id, channels);
+      const budget = BOOST_PLAN_ENABLED
+        ? { daily_budget_cents: dailyCents, budget_from: plan.from, budget_until: plan.until }
+        : undefined;
+      const b = await startBoost(evt.id, channels, budget);
+      if (budget) await boostPlanApi.savePlan(b.id, budget);
       navigate(`/boosts/${b.id}`);
     } catch (e) {
       setStartError(`${evt.title}: ${e instanceof Error ? e.message : 'Could not start the Boost.'}`);
@@ -65,7 +79,7 @@ export const BoostsQueue: React.FC = () => {
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<Tab, number> = { new: 0, proposed: 0, accepted: 0, live: 0, ended: 0, closed: 0 };
+    const c: Record<Tab, number> = { new: 0, proposed: 0, payment: 0, accepted: 0, live: 0, ended: 0, closed: 0 };
     (items ?? []).forEach((b) => c[tabOf(b)]++);
     return c;
   }, [items]);
@@ -84,9 +98,16 @@ export const BoostsQueue: React.FC = () => {
             ads start. Commission applies only to tickets sold while live. Invite pilot hosts from their profile.
           </p>
         </div>
-        <Button variant={picking ? 'secondary' : 'primary'} onClick={togglePicker} disabled={starting !== null}>
-          {picking ? 'Cancel' : 'Boost an event'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {BOOST_PLAN_ENABLED && (
+            <Link to="/boosts/settings">
+              <Button variant="outline">Settings</Button>
+            </Link>
+          )}
+          <Button variant={picking ? 'secondary' : 'primary'} onClick={togglePicker} disabled={starting !== null}>
+            {picking ? 'Cancel' : 'Boost an event'}
+          </Button>
+        </div>
       </div>
 
       {picking && (
@@ -115,6 +136,41 @@ export const BoostsQueue: React.FC = () => {
               );
             })}
           </div>
+          {BOOST_PLAN_ENABLED && (
+            <div className="mb-5">
+              <p className="mb-2 text-xs font-bold text-slate-600">
+                Ad budget plan
+                <span className="ml-2 font-normal text-slate-400">
+                  The host pays it upfront once they accept: {planDays} days, {rupees(dailyCents * planDays)} +{' '}
+                  {rupees(gstOn(dailyCents * planDays))} GST.
+                </span>
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                  Daily (₹)
+                  <input
+                    className="w-32 rounded-2xl border border-brand-100 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-brand-400"
+                    type="number"
+                    min={500}
+                    step={100}
+                    value={plan.daily}
+                    onChange={(e) => setPlan({ ...plan, daily: e.target.value })}
+                  />
+                </label>
+                <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                  From
+                  <DatePill value={plan.from} onChange={(v) => setPlan({ ...plan, from: v })} ariaLabel="Ads from" />
+                </div>
+                <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+                  Until
+                  <DatePill value={plan.until} onChange={(v) => setPlan({ ...plan, until: v })} min={plan.from} ariaLabel="Ads until" />
+                </div>
+              </div>
+              {!planOk && (
+                <p className="mt-2 text-xs font-semibold text-rose-600">At least ₹500 a day for at least 3 days.</p>
+              )}
+            </div>
+          )}
           <label className="mb-2 block text-xs font-bold text-slate-600">
             Select an event
             <span className="ml-2 font-normal text-slate-400">
@@ -143,7 +199,7 @@ export const BoostsQueue: React.FC = () => {
                   <Button
                     variant="primary"
                     onClick={() => handleStart(evt)}
-                    disabled={starting !== null || channels.length === 0}
+                    disabled={starting !== null || channels.length === 0 || !planOk}
                   >
                     {starting === evt.id ? 'Starting…' : 'Boost'}
                   </Button>
@@ -155,7 +211,7 @@ export const BoostsQueue: React.FC = () => {
       )}
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200" role="tablist">
-        {TABS.map((t) => (
+        {TABS.filter((t) => BOOST_PLAN_ENABLED || t.key !== 'payment').map((t) => (
           <button
             key={t.key}
             type="button"

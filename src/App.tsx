@@ -27,6 +27,8 @@ import { NotificationsComposer } from './modules/notifications/NotificationsComp
 import { BillingPage } from './modules/billing/BillingPage';
 import { BoostsQueue } from './modules/boosts/BoostsQueue';
 import { BoostReview } from './modules/boosts/BoostReview';
+import { BoostSettings } from './modules/boosts/BoostSettings';
+import { PremiumPage } from './modules/premium/PremiumPage';
 import { SettingsManager } from './modules/settings/SettingsManager';
 
 interface RouteProps {
@@ -118,7 +120,9 @@ const AppContent: React.FC = () => {
                 <Route path="/payments" element={<PaymentsDirectory />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/boosts" element={<BoostsQueue />} />
+                <Route path="/boosts/settings" element={<BoostSettings />} />
                 <Route path="/boosts/:id" element={<BoostReview />} />
+                <Route path="/premium" element={<PremiumPage />} />
                 <Route path="/cities" element={<CitiesDirectory />} />
                 <Route path="/reviews" element={<ReviewsDirectory />} />
                 <Route path="/reports" element={<ReportsDirectory />} />
