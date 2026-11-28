@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { BOOST_PLAN_ENABLED, boostPlanApi as api, type Band, type BandVersion, type BoostSettings as Settings } from '../../api/boostPlan';
-import { dateTimeIST, pct, rupees } from './format';
+import { pct, rupees } from './format';
 
 // Boost settings (PRD: Boost settings): the marketing fee bands by version and
 // the ad budget rules. A new band version applies to proposals sent after it is
@@ -57,19 +57,21 @@ export const BoostSettings: React.FC = () => {
   if (!settings && !error) return <Card className="p-6 text-sm text-mist">Loading…</Card>;
 
   const latest = versions[0];
-  const live = versions.find((v) => v.published_at);
+  // The newest version is the one proposals use.
+  const live = versions[0];
   const editBand = (i: number, k: 'guide_rate_bps' | 'min_rate_bps' | 'max_rate_bps', pctValue: string) =>
     setDraft((d) => (d ? d.map((b, j) => (j === i ? { ...b, [k]: Math.round(Number(pctValue) * 100) } : b)) : d));
   const bandProblem = draft?.find((b) => b.min_rate_bps > b.guide_rate_bps || b.guide_rate_bps > b.max_rate_bps)
     ? 'In each band the guide must sit between the lowest and highest rate.'
     : null;
 
-  const num = (k: keyof Settings, scale = 1) => (
+  type NumKey = Exclude<keyof Settings, 'budget_required' | 'updated_at'>;
+  const num = (k: NumKey, scale = 1) => (
     <input
       className={`${INPUT} w-28`}
       type="number"
       min={0}
-      value={settings ? settings[k] / scale : ''}
+      value={settings ? (settings[k] ?? 0) / scale : ''}
       onChange={(e) => settings && setSettings({ ...settings, [k]: Math.round(Number(e.target.value) * scale) })}
     />
   );
@@ -89,6 +91,47 @@ export const BoostSettings: React.FC = () => {
         </p>
       )}
       {error && <p className="text-sm font-semibold text-rose-600">{error}</p>}
+
+      {settings && (
+        <Card className="p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-ink">Paid ad budget</h3>
+              <p className="mt-0.5 max-w-2xl text-xs text-mist">
+                {settings.budget_required
+                  ? 'On: every new Boost needs an ad budget the host pays upfront. Boosts started before keep their old terms.'
+                  : 'Off: new Boosts still use the old terms (no budget, commission only). Turn on to launch the paid ad budget.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge color={settings.budget_required ? 'green' : 'slate'} withDot>
+                {settings.budget_required ? 'On' : 'Off'}
+              </Badge>
+              <Button
+                variant={settings.budget_required ? 'outline' : 'primary'}
+                size="sm"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const next = !settings.budget_required;
+                  if (
+                    window.confirm(
+                      next
+                        ? 'Turn on the paid ad budget? From now on, every new Boost needs a budget the host pays upfront.'
+                        : 'Turn off the paid ad budget? New Boosts go back to the old terms.',
+                    )
+                  )
+                    void run(next ? 'Paid ad budget is on.' : 'Paid ad budget is off.', () =>
+                      api.saveSettings({ ...settings, budget_required: next }),
+                    );
+                }}
+              >
+                {settings.budget_required ? 'Turn off' : 'Turn on'}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -113,11 +156,9 @@ export const BoostSettings: React.FC = () => {
               {draft ? (
                 <Badge color="amber">Draft</Badge>
               ) : v === live ? (
-                <Badge color="green">In use since {dateTimeIST(v.published_at)}</Badge>
-              ) : v.published_at ? (
-                <Badge color="slate">Earlier</Badge>
+                <Badge color="green">In use</Badge>
               ) : (
-                <Badge color="amber">Not published</Badge>
+                <Badge color="slate">Earlier</Badge>
               )}
             </p>
             <div className="overflow-x-auto">
@@ -194,6 +235,10 @@ export const BoostSettings: React.FC = () => {
               {num('min_daily_budget_cents', 100)}
             </label>
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+              Daily budget steps (₹)
+              {num('budget_step_cents', 100)}
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
               Minimum days
               {num('min_days')}
             </label>
@@ -202,16 +247,25 @@ export const BoostSettings: React.FC = () => {
               {num('payment_window_days')}
             </label>
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
-              Largest video (MB)
-              {num('max_video_mb')}
+              GST on the budget (%)
+              {num('budget_gst_bps', 100)}
             </label>
+            <span className="hidden sm:block" />
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
               Largest image (MB)
-              {num('max_image_mb')}
+              {num('creative_image_max_mb')}
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+              Largest video (MB)
+              {num('creative_video_max_mb')}
             </label>
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
               Largest brand file (MB)
-              {num('max_brand_mb')}
+              {num('creative_other_max_mb')}
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-600">
+              Largest report (MB)
+              {num('report_max_mb')}
             </label>
           </div>
         )}

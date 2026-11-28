@@ -4,15 +4,15 @@ import type { BoostDetail } from './boosts';
 // Boost with a paid ad budget, and Premium Hosts (PRD: Premium Hosts and paid
 // Boost marketing). Money in paise, rates in basis points.
 //
-// Until the backend serves the PRD's admin routes, these screens run on a
-// stand-in kept in this browser (VITE_BOOST_PLAN_MOCK, on in local development
-// only). It layers the new fields over today's real Boosts and keeps Premium
-// memberships, settings and rate bands locally.
+// The backend serves every route (myslotmate-backend docs/premium-and-paid-
+// boost.md). VITE_BOOST_PLAN_MOCK=true swaps in a stand-in kept in this
+// browser for trying the screens without it.
 
 const DEV = import.meta.env.DEV;
 const flag = (v: string | undefined) => v === 'true' || (v === undefined && DEV);
 export const BOOST_PLAN_ENABLED = flag(import.meta.env.VITE_ENABLE_BOOST_PLAN as string | undefined);
-export const BOOST_PLAN_MOCK = flag(import.meta.env.VITE_BOOST_PLAN_MOCK as string | undefined);
+/** Test mode, only when asked for: the backend serves every route now. */
+export const BOOST_PLAN_MOCK = (import.meta.env.VITE_BOOST_PLAN_MOCK as string | undefined) === 'true';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -132,11 +132,17 @@ export interface PremiumMember {
 
 export interface BoostSettings {
   min_daily_budget_cents: number;
+  budget_step_cents: number;
   min_days: number;
   payment_window_days: number;
-  max_video_mb: number;
-  max_image_mb: number;
-  max_brand_mb: number;
+  budget_gst_bps: number;
+  /** The launch switch: new Boosts need a paid ad budget. */
+  budget_required: boolean;
+  creative_image_max_mb: number;
+  creative_video_max_mb: number;
+  creative_other_max_mb: number;
+  report_max_mb: number;
+  updated_at?: string;
 }
 
 export interface Band {
@@ -202,13 +208,62 @@ async function putSigned(path: string, file: File): Promise<StoredFile> {
   return { key: signed.key, url: signed.url, name: file.name, mime_type: file.type, size: file.size };
 }
 
+/** A payment as the backend sends it (offline_reference, new_daily_budget_cents). */
+interface ApiPayment extends Omit<PaymentRow, 'reference' | 'days_added'> {
+  days_added: number;
+  offline_reference: string | null;
+  offline_paid_on: string | null;
+  reverse_reason: string | null;
+  new_daily_budget_cents: number | null;
+}
+
+const toPaymentRow = (p: ApiPayment): PaymentRow => ({
+  ...p,
+  days_added: p.days_added || null,
+  reference: p.offline_reference,
+  paid_at: p.paid_at ?? (p.offline_paid_on ? `${p.offline_paid_on}T12:00:00+05:30` : null),
+});
+
+/** GET /admin/boosts/{id} already carries the plan fields, payments and spend. */
+type PlanDetail = BoostDetail & Partial<PlanFields> & { payments?: ApiPayment[] | null; spend?: SpendEntry[] | null };
+
+/** Bands come as one flat list, each row with its version; group them, newest first. */
+const groupBands = (rows: (Band & { version: number })[]): BandVersion[] => {
+  const by = new Map<number, Band[]>();
+  rows.forEach(({ version, ...b }) => by.set(version, [...(by.get(version) ?? []), b]));
+  const versions = [...by.keys()].sort((a, b) => b - a);
+  return versions.map((v, i) => ({
+    version: v,
+    // The newest version is the one proposals use.
+    published_at: i === 0 ? 'current' : 'earlier',
+    bands: (by.get(v) ?? []).sort((a, b) => a.min_price_cents - b.min_price_cents),
+  }));
+};
+
 const real = {
-  getPlan: (d: BoostDetail) => {
-    void d;
-    return Promise.all([
-      apiFetch<PlanState>(`/admin/boosts/${d.id}`),
+  getPlan: async (d: BoostDetail): Promise<PlanState> => {
+    const x = d as PlanDetail;
+    const [creatives, reports] = await Promise.all([
       apiFetch<Creative[]>(`/admin/boosts/${d.id}/creatives`),
-    ]).then(([p, creatives]) => ({ ...p, creatives }));
+      apiFetch<Report[]>(`/admin/boosts/${d.id}/reports`),
+    ]);
+    return {
+      pricing_model: x.pricing_model ?? 'no_upfront',
+      daily_budget_cents: x.daily_budget_cents ?? null,
+      budget_from: x.budget_from ?? null,
+      budget_until: x.budget_until ?? null,
+      budget_total_cents: x.budget_total_cents ?? 0,
+      budget_gst_cents: x.budget_gst_cents ?? 0,
+      budget_status: x.budget_status ?? 'not_required',
+      payment_due_by: x.payment_due_by ?? null,
+      spent_cents: x.spent_cents ?? 0,
+      closed_at: x.closed_at ?? null,
+      payments: (x.payments ?? []).map(toPaymentRow),
+      spend: x.spend ?? [],
+      // A replaced report stays in the history; show the current ones.
+      reports: (reports ?? []).filter((r) => !(r as Report & { replaced_at?: string | null }).replaced_at),
+      creatives: creatives ?? [],
+    };
   },
   /** The real backend takes the plan with the proposal or start; nothing extra to save. */
   savePlan: (boostId: string, plan: BudgetPlanInput): Promise<void> => {
@@ -221,10 +276,10 @@ const real = {
       method: 'POST',
       body: { kind, days_added: daysAdded },
     }),
-  recordOffline: (boostId: string, p: { amount_cents: number; paid_on: string; reference: string; kind: 'budget' | 'top_up'; days_added?: number }) =>
-    apiFetch<PaymentRow>(`/admin/boosts/${boostId}/payments/offline`, { method: 'POST', body: p }),
-  reversePayment: (boostId: string, paymentId: string, reason: string) =>
-    apiFetch<PaymentRow>(`/admin/boosts/${boostId}/payments/${paymentId}/reverse`, { method: 'POST', body: { reason } }),
+  recordOffline: async (boostId: string, p: { amount_cents: number; paid_on: string; reference: string; kind: 'budget' | 'top_up'; days_added?: number }) =>
+    toPaymentRow(await apiFetch<ApiPayment>(`/admin/boosts/${boostId}/payments/offline`, { method: 'POST', body: p })),
+  reversePayment: async (boostId: string, paymentId: string, reason: string) =>
+    toPaymentRow(await apiFetch<ApiPayment>(`/admin/boosts/${boostId}/payments/${paymentId}/reverse`, { method: 'POST', body: { reason } })),
   saveSpend: (boostId: string, entries: SpendEntry[]) =>
     apiFetch<PlanState>(`/admin/boosts/${boostId}/spend`, { method: 'PUT', body: { entries } }),
   uploadCreative: async (boostId: string, files: File[], body: { type: CreativeType; caption?: string }) => {
@@ -251,7 +306,13 @@ const real = {
     apiFetch<{ items: PremiumMember[]; counts: Partial<Record<PremiumStatus, number>> }>(
       `/admin/premium${status ? `?status=${status}` : ''}`,
     ),
-  getPremium: (hostId: string) => apiFetch<PremiumMember | null>(`/admin/premium/${hostId}`),
+  getPremium: async (hostId: string): Promise<PremiumMember | null> => {
+    const r = await apiFetch<{ membership: (Omit<PremiumMember, 'status'> & { status: PremiumStatus | 'none' }) | null }>(
+      `/admin/premium/${hostId}`,
+    );
+    const m = r.membership;
+    return m && m.status !== 'none' ? (m as PremiumMember) : null;
+  },
   approvePremium: (hostId: string, m: { manager_name: string; manager_contact: string }) =>
     apiFetch<PremiumMember>(`/admin/premium/${hostId}/approve`, { method: 'POST', body: m }),
   declinePremium: (hostId: string, reason: string) =>
@@ -263,8 +324,12 @@ const real = {
 
   getSettings: () => apiFetch<BoostSettings>('/admin/boost-settings'),
   saveSettings: (s: BoostSettings) => apiFetch<BoostSettings>('/admin/boost-settings', { method: 'PUT', body: s }),
-  getBands: () => apiFetch<BandVersion[]>('/admin/boost-bands'),
-  publishBands: (bands: Band[]) => apiFetch<BandVersion>('/admin/boost-bands', { method: 'POST', body: { bands } }),
+  getBands: async () => groupBands((await apiFetch<(Band & { version: number })[]>('/admin/boost-bands')) ?? []),
+  publishBands: async (bands: Band[]): Promise<BandVersion> => {
+    const r = await apiFetch<{ version?: number } | number>('/admin/boost-bands', { method: 'POST', body: { bands } });
+    const version = typeof r === 'number' ? r : (r?.version ?? 0);
+    return { version, published_at: 'current', bands };
+  },
 };
 
 export type BoostPlanAdminApi = typeof real;
@@ -282,11 +347,15 @@ interface Overlay {
 
 const DEFAULT_SETTINGS: BoostSettings = {
   min_daily_budget_cents: 50_000,
+  budget_step_cents: 10_000,
   min_days: 3,
   payment_window_days: 7,
-  max_video_mb: 200,
-  max_image_mb: 20,
-  max_brand_mb: 50,
+  budget_gst_bps: 1800,
+  budget_required: false,
+  creative_image_max_mb: 20,
+  creative_video_max_mb: 200,
+  creative_other_max_mb: 50,
+  report_max_mb: 50,
 };
 
 const V2_BANDS: Band[] = [
