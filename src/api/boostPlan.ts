@@ -72,6 +72,8 @@ export type CreativeStatus =
 export interface StoredFile {
   key: string;
   url: string;
+  /** Saves the file instead of showing it (signed, one hour). */
+  download_url?: string;
   name: string;
   mime_type: string;
   size: number;

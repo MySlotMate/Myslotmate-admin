@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Copy, ExternalLink, FileText, Upload } from 'lucide-react';
+import { Copy, Download, ExternalLink, FileText, Upload } from 'lucide-react';
+import { apiDownload } from '../../api/client';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge, type BadgeColor } from '../../components/ui/Badge';
@@ -255,6 +256,17 @@ const Creatives: React.FC<Props> = ({ d, plan, busy, run }) => {
           <h3 className={H3}>Creatives</h3>
           <p className={SUB}>The host&apos;s uploads to review, and the team&apos;s own for the host to approve. Going live needs one marked In use.</p>
         </div>
+        {plan.creatives.length > 0 && !BOOST_PLAN_MOCK && (
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            disabled={busy}
+            onClick={() => void run('Download started.', () => apiDownload(`/admin/boosts/${d.id}/creatives/download`, `boost-${d.id.slice(0, 8)}-creatives.zip`))}
+          >
+            <Download className="h-4 w-4" /> Download all (ZIP)
+          </Button>
+        )}
         {BOOST_PLAN_MOCK && !ended && (
           <Button variant="ghost" size="sm" type="button" disabled={busy} onClick={() => void run('Test mode: the host uploaded a reel.', async () => mockHostCreative(d.id))}>
             Test: host uploads a reel
@@ -287,6 +299,30 @@ const Creatives: React.FC<Props> = ({ d, plan, busy, run }) => {
                   <Badge color={CREATIVE_COLOR[c.status]}>{CREATIVE_STATUS_LABEL[c.status]}</Badge>
                   {c.caption && <p className="truncate text-xs text-slate-600">{c.caption}</p>}
                   {c.status_note && <p className="text-xs text-amber-700">{c.status_note}</p>}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold">
+                    {c.files.map((file, i) => (
+                      <a
+                        key={file.key}
+                        href={file.download_url ?? file.url}
+                        download={file.name}
+                        className="inline-flex max-w-[180px] items-center gap-1 truncate text-brand-700 hover:underline"
+                        title={file.name}
+                      >
+                        <Download className="h-3.5 w-3.5 shrink-0" />
+                        {c.files.length > 1 ? `File ${i + 1}` : 'Download'}
+                      </a>
+                    ))}
+                    {c.files.length > 1 && !BOOST_PLAN_MOCK && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="inline-flex items-center gap-1 text-brand-700 hover:underline disabled:opacity-50"
+                        onClick={() => void run('Download started.', () => apiDownload(`/admin/boosts/${d.id}/creatives/download?creative_id=${c.id}`, `${c.type}-${c.id.slice(0, 8)}.zip`))}
+                      >
+                        All {c.files.length} (ZIP)
+                      </button>
+                    )}
+                  </div>
                   {!ended && (
                     <div className="flex flex-wrap gap-1 pt-1">
                       {(c.uploaded_by_kind === 'host'
