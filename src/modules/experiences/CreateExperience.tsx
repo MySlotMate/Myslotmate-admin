@@ -45,6 +45,7 @@ import {
   deleteEvent,
   cancelEvent,
   fetchEventDetail,
+  fetchEventJoinLink,
   publishEvent,
   uploadFiles,
   listExperienceTemplates,
@@ -853,6 +854,16 @@ export const CreateExperience: React.FC = () => {
             // Non-fatal: leave blank; host can set a new passkey.
           }
         }
+        // The meeting link is read on its own: the event never carries it.
+        let meetingLink = '';
+        if (ev.is_online) {
+          try {
+            meetingLink = await fetchEventJoinLink(editEventId);
+            if (cancelled) return;
+          } catch {
+            // Non-fatal: leave blank; saving a blank link keeps the current one.
+          }
+        }
         const dt = utcToISTInputs(ev.time);
         const endDt = ev.end_time ? utcToISTInputs(ev.end_time) : null;
         const hasTiers = (ev.price_tiers?.length ?? 0) > 0;
@@ -884,7 +895,7 @@ export const CreateExperience: React.FC = () => {
           existingGalleryUrls: ev.gallery_urls ?? [],
           isOnline: ev.is_online,
           location: ev.location ?? "",
-          meetingLink: ev.meeting_link ?? "",
+          meetingLink,
           googleMapsUrl: ev.google_maps_url ?? "",
           durationMinutes: ev.duration_minutes ?? 60,
           minGroupSize: ev.min_group_size ?? 1,
