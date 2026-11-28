@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { BOOST_CHANNELS, fetchBoosts, startBoost, type Boost } from '../../api/boosts';
-import { BOOST_PLAN_ENABLED, boostPlanApi, daysBetween, gstOn } from '../../api/boostPlan';
+import { BOOST_PLAN_ENABLED, boostPlanApi, daysBetween, gstOn, useBoostSettings } from '../../api/boostPlan';
 import { DatePill } from '../../components/event-form/DateTimePills';
 import { searchMarketingEvents, type MarketingEventOption } from '../../api/landingPages';
 import { dateTimeIST, pct, rupees, statusBadge, tabOf, TABS, type Tab } from './format';
@@ -19,6 +19,7 @@ const inputCls =
 export const BoostsQueue: React.FC = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState<Boost[] | null>(null);
+  const rules = useBoostSettings();
   const [tab, setTab] = useState<Tab>('new');
   const [error, setError] = useState<string | null>(null);
 
@@ -142,7 +143,7 @@ export const BoostsQueue: React.FC = () => {
                 Ad budget plan
                 <span className="ml-2 font-normal text-slate-400">
                   The host pays it upfront once they accept: {planDays} days, {rupees(dailyCents * planDays)} +{' '}
-                  {rupees(gstOn(dailyCents * planDays))} GST.
+                  {rupees(gstOn(dailyCents * planDays, rules?.budget_gst_bps))} GST.
                 </span>
               </p>
               <div className="flex flex-wrap items-end gap-3">

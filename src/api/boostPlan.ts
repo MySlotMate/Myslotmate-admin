@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { apiFetch } from './client';
 import type { BoostDetail } from './boosts';
 
@@ -160,7 +161,24 @@ export interface BandVersion {
 }
 
 export const GST_BPS = 1800;
-export const gstOn = (c: number) => Math.round((c * GST_BPS) / 10_000);
+export const gstOn = (c: number, bps = GST_BPS) => Math.round((c * bps) / 10_000);
+
+/** The admin's budget rules, read once per page; null until they load. */
+export function useBoostSettings(): BoostSettings | null {
+  const [s, setS] = useState<BoostSettings | null>(null);
+  useEffect(() => {
+    if (!BOOST_PLAN_ENABLED) return;
+    let live = true;
+    boostPlanApi
+      .getSettings()
+      .then((x) => live && setS(x))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return s;
+}
 export const daysBetween = (from: string, until: string) =>
   Math.floor((new Date(`${until}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86_400_000) + 1;
 

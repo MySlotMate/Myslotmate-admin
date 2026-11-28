@@ -19,7 +19,15 @@ import {
   type BoostRate,
 } from '../../api/boosts';
 import { dateTimeIST, pct, rupees, statusBadge } from './format';
-import { BOOST_PLAN_ENABLED, boostPlanApi, daysBetween, goLiveBlocker, gstOn, type PlanState } from '../../api/boostPlan';
+import {
+  BOOST_PLAN_ENABLED,
+  boostPlanApi,
+  daysBetween,
+  goLiveBlocker,
+  gstOn,
+  useBoostSettings,
+  type PlanState,
+} from '../../api/boostPlan';
 import { BoostPlanPanel } from './BoostPlanPanel';
 
 // One Boost: the request, the proposal form, go-live and the campaign.
@@ -88,6 +96,7 @@ export const BoostReview: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [liveUntil, setLiveUntil] = useState('');
   const [campaign, setCampaign] = useState({ reach: '', clicks: '' });
+  const rules = useBoostSettings();
   // Paid-budget Boost: the plan and its work (payments, creatives, spend, reports).
   const [plan, setPlan] = useState<PlanState | null>(null);
   const [budget, setBudget] = useState({ daily: '', from: '', until: '' });
@@ -159,9 +168,14 @@ export const BoostReview: React.FC = () => {
   const usesBudget = BOOST_PLAN_ENABLED && plan?.pricing_model === 'budget';
   const dailyCents = Math.round((Number(budget.daily) || 0) * 100);
   const budgetDays = budget.from && budget.until ? daysBetween(budget.from, budget.until) : 0;
-  if (usesBudget) {
-    if (dailyCents < 50_000) problems.push('Set a daily ad budget of at least ₹500.');
-    if (budgetDays < 3) problems.push('Run the budget for at least 3 days.');
+  if (usesBudget && rules) {
+    // The same rules the backend checks (Boost settings).
+    if (dailyCents < rules.min_daily_budget_cents)
+      problems.push(`Set a daily ad budget of at least ₹${rules.min_daily_budget_cents / 100}.`);
+    else if (dailyCents % rules.budget_step_cents !== 0)
+      problems.push(`Use steps of ₹${rules.budget_step_cents / 100} for the daily budget.`);
+    if (budgetDays < rules.min_days)
+      problems.push(`Run the budget for at least ${rules.min_days} day${rules.min_days === 1 ? '' : 's'}.`);
   }
   const liveBlocker = goLiveBlocker(plan);
 
@@ -322,7 +336,7 @@ export const BoostReview: React.FC = () => {
           <h3 className="text-lg font-bold text-ink">{d.status === 'under_review' ? 'Proposal' : 'Proposal sent'}</h3>
           <p className="mt-0.5 text-xs text-mist">
             Commission per ticket type, on the ticket price after any discount; the guest&apos;s platform fee is
-            separate. Under ₹1,000 is fixed at 20%. From ₹1,000 you can set 12–20%, with a reason the host will see when
+            separate. {usesBudget ? 'Rates follow the latest fee bands in Boost settings' : 'Under ₹1,000 is fixed at 20%. From ₹1,000 you can set 12–20%'}, with a reason the host will see when
             it differs from the guide.
             {accepted && ' The host has accepted; sending a new proposal asks them to accept again.'}
           </p>
@@ -416,7 +430,7 @@ export const BoostReview: React.FC = () => {
                 <span>
                   {budgetDays} days · {rupees(dailyCents * budgetDays)}
                 </span>
-                <span className="font-bold text-ink">Host pays {rupees(dailyCents * budgetDays + gstOn(dailyCents * budgetDays))} with GST</span>
+                <span className="font-bold text-ink">Host pays {rupees(dailyCents * budgetDays + gstOn(dailyCents * budgetDays, rules?.budget_gst_bps))} with GST</span>
               </div>
             </div>
           )}
